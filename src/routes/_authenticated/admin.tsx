@@ -1011,6 +1011,14 @@ function SettingsView({
         </p>
         <div className="grid gap-4">
           <div>
+            <Label className="text-white/80">Texto do botão do disparo</Label>
+            <Input
+              value={settings.dispatch_button_text}
+              onChange={(e) => setSettings({ ...settings, dispatch_button_text: e.target.value })}
+              className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+            />
+          </div>
+          <div>
             <Label className="text-white/80">
               1️⃣ Quando o lead <b>desliga antes</b> do fim da chamada grátis
             </Label>
@@ -1020,11 +1028,11 @@ function SettingsView({
               onChange={(e) => setSettings({ ...settings, dispatch_copy_hangup: e.target.value })}
               className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
             />
-            <div className="mt-1 text-xs text-white/40">Disparado 3 min depois que o lead desliga.</div>
+            <div className="mt-1 text-xs text-white/40">Disparado na hora que o lead desliga.</div>
           </div>
           <div>
             <Label className="text-white/80">
-              2️⃣ Quando o lead <b>vê o botão de pagar e não paga</b> em 3 min
+              2️⃣ Quando o lead <b>vê o botão de pagar</b>
             </Label>
             <Textarea
               rows={5}
@@ -1032,7 +1040,7 @@ function SettingsView({
               onChange={(e) => setSettings({ ...settings, dispatch_copy_no_payment: e.target.value })}
               className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
             />
-            <div className="mt-1 text-xs text-white/40">Disparado 3 min depois que a oferta aparece na tela.</div>
+            <div className="mt-1 text-xs text-white/40">Disparado na hora que a oferta aparece na tela.</div>
           </div>
           <div>
             <Label className="text-white/80">
