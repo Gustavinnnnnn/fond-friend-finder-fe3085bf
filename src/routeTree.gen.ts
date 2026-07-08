@@ -13,6 +13,7 @@ import { Route as CallRouteImport } from './routes/call'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PaySessionIdRouteImport } from './routes/pay.$sessionId'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
 import { Route as ApiPublicHooksProcessDispatchesRouteImport } from './routes/api/public/hooks/process-dispatches'
@@ -34,6 +35,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaySessionIdRoute = PaySessionIdRouteImport.update({
+  id: '/pay/$sessionId',
+  path: '/pay/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/call': typeof CallRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
   '/api/public/hooks/process-dispatches': typeof ApiPublicHooksProcessDispatchesRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/call': typeof CallRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
   '/api/public/hooks/process-dispatches': typeof ApiPublicHooksProcessDispatchesRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/call': typeof CallRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/pay/$sessionId': typeof PaySessionIdRoute
   '/api/public/hooks/process-dispatches': typeof ApiPublicHooksProcessDispatchesRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
 }
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/call'
     | '/admin'
+    | '/pay/$sessionId'
     | '/api/public/hooks/process-dispatches'
     | '/api/public/telegram/webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -95,6 +105,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/call'
     | '/admin'
+    | '/pay/$sessionId'
     | '/api/public/hooks/process-dispatches'
     | '/api/public/telegram/webhook'
   id:
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/call'
     | '/_authenticated/admin'
+    | '/pay/$sessionId'
     | '/api/public/hooks/process-dispatches'
     | '/api/public/telegram/webhook'
   fileRoutesById: FileRoutesById
@@ -113,6 +125,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CallRoute: typeof CallRoute
+  PaySessionIdRoute: typeof PaySessionIdRoute
   ApiPublicHooksProcessDispatchesRoute: typeof ApiPublicHooksProcessDispatchesRoute
   ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
 }
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pay/$sessionId': {
+      id: '/pay/$sessionId'
+      path: '/pay/$sessionId'
+      fullPath: '/pay/$sessionId'
+      preLoaderRoute: typeof PaySessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -187,6 +207,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CallRoute: CallRoute,
+  PaySessionIdRoute: PaySessionIdRoute,
   ApiPublicHooksProcessDispatchesRoute: ApiPublicHooksProcessDispatchesRoute,
   ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
 }
