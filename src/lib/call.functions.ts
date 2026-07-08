@@ -61,6 +61,7 @@ export const startCallSession = createServerFn({ method: "POST" })
     const fwd = getRequestHeader("x-forwarded-for");
     const real = getRequestHeader("x-real-ip");
     const ip = cf || fwd?.split(",")[0]?.trim() || real || null;
+    let savedPhone: string | null = null;
     let geo: {
       city: string | null;
       region: string | null;
@@ -95,6 +96,15 @@ export const startCallSession = createServerFn({ method: "POST" })
       }
     }
 
+    if (data.telegramChatId) {
+      const { data: contact } = await supabaseAdmin
+        .from("telegram_contacts")
+        .select("phone")
+        .eq("chat_id", data.telegramChatId)
+        .maybeSingle();
+      savedPhone = contact?.phone ?? null;
+    }
+
     const { data: row, error } = await supabaseAdmin
       .from("call_sessions")
       .insert({
@@ -104,6 +114,7 @@ export const startCallSession = createServerFn({ method: "POST" })
         consent_recording: data.consent,
         telegram_chat_id: data.telegramChatId ?? null,
         telegram_username: data.telegramUsername ?? null,
+        phone: savedPhone,
         geo_city: geo?.city ?? null,
         geo_region: geo?.region ?? null,
         geo_country: geo?.country ?? null,

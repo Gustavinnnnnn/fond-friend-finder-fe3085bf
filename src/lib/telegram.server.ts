@@ -246,6 +246,16 @@ export async function sendStartWelcome(chatId: number): Promise<void> {
     text: message,
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
+
+  await tgCall("sendMessage", {
+    chat_id: chatId,
+    text: "Se quiser, compartilha seu WhatsApp pra eu te achar mais fácil depois 💋",
+    reply_markup: {
+      keyboard: [[{ text: "📲 Compartilhar WhatsApp", request_contact: true }]],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    },
+  });
 }
 
 export async function sendPlainMessage(chatId: number, text: string): Promise<void> {

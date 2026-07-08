@@ -19,6 +19,7 @@ type TelegramUpdate = {
     chat: { id: number };
     from?: { id: number; username?: string; first_name?: string };
     text?: string;
+    contact?: { phone_number?: string; user_id?: number; first_name?: string };
   };
 };
 
@@ -50,6 +51,26 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
 
         const text = (message.text ?? "").trim();
         const chatId = message.chat.id;
+
+        if (message.contact?.phone_number) {
+          try {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            await supabaseAdmin.from("telegram_contacts").upsert(
+              {
+                chat_id: chatId,
+                user_id: message.contact.user_id ?? message.from.id,
+                username: message.from.username ?? null,
+                first_name: message.contact.first_name ?? message.from.first_name ?? null,
+                phone: message.contact.phone_number.replace(/\D/g, ""),
+              },
+              { onConflict: "chat_id" },
+            );
+            await sendPlainMessage(chatId, "Perfeito, salvei seu contato 💋");
+          } catch (err) {
+            console.error("save telegram contact failed", err);
+          }
+          return Response.json({ ok: true });
+        }
 
         // Any /start (with or without payload) triggers the welcome flow
         if (/^\/start(\b|$)/i.test(text)) {

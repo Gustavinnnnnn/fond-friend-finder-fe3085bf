@@ -871,7 +871,7 @@ function SettingsView({
               className="mt-1 border-neutral-700 bg-neutral-800 text-white"
             />
             <p className="mt-1 text-xs text-white/45">
-              Cobrado quando o lead clica em "Continuar minha compra" no Telegram.
+              Cobrado quando o lead clica no botão do disparo no Telegram.
             </p>
           </div>
           <div className="sm:col-span-2">
