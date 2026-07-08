@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  claimAdmin,
   getDashboard,
   getRecordingUrl,
 } from "@/lib/admin.functions";
@@ -113,7 +112,6 @@ function AdminPage() {
   const [uploading, setUploading] = useState<"video" | "photo" | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  const claimFn = useServerFn(claimAdmin);
   const dashboardFn = useServerFn(getDashboard);
   const recordingUrlFn = useServerFn(getRecordingUrl);
 
@@ -121,29 +119,23 @@ function AdminPage() {
     (async () => {
       const { data: userRes } = await supabase.auth.getUser();
       if (!userRes.user) return;
-      const { data: roleRows } = await supabase
+      const { data: roleRows, error } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", userRes.user.id)
         .eq("role", "admin");
+      if (error) {
+        toast.error("Não foi possível verificar o acesso admin.");
+        setIsAdmin(false);
+        return;
+      }
       if (roleRows && roleRows.length > 0) {
         setIsAdmin(true);
         return;
       }
-      try {
-        const { becameAdmin } = await claimFn({});
-        if (becameAdmin) {
-          toast.success("Você virou o admin principal.");
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch (err) {
-        console.error(err);
-        setIsAdmin(false);
-      }
+      setIsAdmin(false);
     })();
-  }, [claimFn]);
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     try {
