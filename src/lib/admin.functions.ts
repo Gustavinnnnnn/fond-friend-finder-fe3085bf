@@ -61,7 +61,7 @@ export const getAdminSettings = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
       .from("settings")
-      .select("model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url")
+      .select("model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url, telegram_bot_username, telegram_copy_template, telegram_purchase_url")
       .eq("id", 1)
       .single();
     if (error) throw new Error(error.message);
@@ -96,6 +96,9 @@ export const updateAdminSettings = createServerFn({ method: "POST" })
         offer_title: z.string().min(1).max(120),
         offer_subtitle: z.string().min(1).max(240),
         contact_url: z.string().nullable(),
+        telegram_bot_username: z.string().max(64).nullable(),
+        telegram_copy_template: z.string().min(1).max(4000),
+        telegram_purchase_url: z.string().max(500).nullable(),
       })
       .parse(data),
   )

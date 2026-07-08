@@ -8,7 +8,7 @@ export const getCallSettings = createServerFn({ method: "GET" }).handler(async (
   const { data, error } = await supabaseAdmin
     .from("settings")
     .select(
-      "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url",
+      "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url, telegram_bot_username",
     )
     .eq("id", 1)
     .single();
