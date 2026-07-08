@@ -4,8 +4,9 @@ import { z } from "zod";
 
 // Public data only: returns signed media URLs for the private media bucket.
 export const getCallSettings = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
+  const { createBackendClient } = await import("@/lib/backend-public.server");
+  const supabase = createBackendClient();
+  const { data, error } = await supabase
     .from("settings")
     .select(
       "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url, telegram_bot_username",
@@ -24,7 +25,7 @@ export const getCallSettings = createServerFn({ method: "GET" }).handler(async (
       if (index === -1) return value;
       path = decodeURIComponent(value.slice(index + marker.length).split("?")[0] ?? "");
     }
-    const { data: signed, error: signError } = await supabaseAdmin.storage
+    const { data: signed, error: signError } = await supabase.storage
       .from("media")
       .createSignedUrl(path, 60 * 60 * 6);
     if (signError) return value;
@@ -55,7 +56,8 @@ export const startCallSession = createServerFn({ method: "POST" })
         .parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
     const userAgent = getRequestHeader("user-agent") ?? null;
     const cf = getRequestHeader("cf-connecting-ip");
     const fwd = getRequestHeader("x-forwarded-for");
@@ -97,35 +99,24 @@ export const startCallSession = createServerFn({ method: "POST" })
     }
 
     if (data.telegramChatId) {
-      const { data: contact } = await supabaseAdmin
-        .from("telegram_contacts")
-        .select("phone")
-        .eq("chat_id", data.telegramChatId)
-        .maybeSingle();
-      savedPhone = contact?.phone ?? null;
+      savedPhone = null;
     }
 
-    const { data: row, error } = await supabaseAdmin
-      .from("call_sessions")
-      .insert({
-        status: "started",
-        user_agent: userAgent,
-        ip,
-        consent_recording: data.consent,
-        telegram_chat_id: data.telegramChatId ?? null,
-        telegram_username: data.telegramUsername ?? null,
-        phone: savedPhone,
-        geo_city: geo?.city ?? null,
-        geo_region: geo?.region ?? null,
-        geo_country: geo?.country ?? null,
-        geo_lat: geo?.lat ?? null,
-        geo_lng: geo?.lng ?? null,
-      })
-      .select("id")
-      .single();
+    const { data: row, error } = await (supabase as any).rpc("app_start_call_session", {
+      _consent: data.consent,
+      _telegram_chat_id: data.telegramChatId ?? null,
+      _telegram_username: data.telegramUsername ?? null,
+      _user_agent: userAgent,
+      _ip: ip,
+      _geo_city: geo?.city ?? null,
+      _geo_region: geo?.region ?? null,
+      _geo_country: geo?.country ?? null,
+      _geo_lat: geo?.lat ?? null,
+      _geo_lng: geo?.lng ?? null,
+    });
 
     if (error) throw new Error(error.message);
-    return { sessionId: row.id as string };
+    return { sessionId: row as string };
   });
 
 // ---------- Save browser-provided geolocation ----------
@@ -142,15 +133,14 @@ export const saveGeolocation = createServerFn({ method: "POST" })
         .parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("call_sessions")
-      .update({
-        geo_lat: data.lat,
-        geo_lng: data.lng,
-        geo_accuracy: data.accuracy,
-      })
-      .eq("id", data.sessionId);
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
+    const { error } = await (supabase as any).rpc("app_update_session_geo", {
+      _session_id: data.sessionId,
+      _lat: data.lat,
+      _lng: data.lng,
+      _accuracy: data.accuracy,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -166,10 +156,11 @@ export const getRecordingUploadUrl = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
     const cleanExt = data.ext.replace(/[^a-z0-9]/gi, "") || "webm";
     const path = `recordings/${data.sessionId}-${Date.now()}.${cleanExt}`;
-    const { data: signed, error } = await supabaseAdmin.storage
+    const { data: signed, error } = await supabase.storage
       .from("media")
       .createSignedUploadUrl(path);
     if (error) throw new Error(error.message);
@@ -181,11 +172,12 @@ export const confirmRecordingUploaded = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid(), path: z.string().min(1) }).parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("call_sessions")
-      .update({ recording_path: data.path })
-      .eq("id", data.sessionId);
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
+    const { error } = await (supabase as any).rpc("app_set_recording_path", {
+      _session_id: data.sessionId,
+      _path: data.path,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -197,11 +189,11 @@ export const endFreeCall = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("call_sessions")
-      .update({ status: "free_ended", free_ended_at: new Date().toISOString() })
-      .eq("id", data.sessionId);
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
+    const { error } = await (supabase as any).rpc("app_end_free_call", {
+      _session_id: data.sessionId,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -212,11 +204,11 @@ export const completeCall = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("call_sessions")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", data.sessionId);
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
+    const { error } = await (supabase as any).rpc("app_complete_call", {
+      _session_id: data.sessionId,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
