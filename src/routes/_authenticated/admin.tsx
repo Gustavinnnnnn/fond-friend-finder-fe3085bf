@@ -259,6 +259,7 @@ function AdminPage() {
           video_url: settings.video_url,
           free_duration_seconds: settings.free_duration_seconds,
           price_cents: settings.price_cents,
+          dispatch_price_cents: settings.dispatch_price_cents,
           offer_title: settings.offer_title,
           offer_subtitle: settings.offer_subtitle,
           contact_url: settings.contact_url,
