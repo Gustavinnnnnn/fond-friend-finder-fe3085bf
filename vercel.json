@@ -2,7 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "bun run build",
   "installCommand": "bun install",
-  "outputDirectory": ".output/public",
   "framework": null,
   "regions": ["gru1"],
   "build": {
@@ -20,8 +19,5 @@
     "VITE_SUPABASE_URL": "https://lkyqghspjndbqbkpuuxm.supabase.co",
     "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxreXFnaHNwam5kYnFia3B1dXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTA1MTYsImV4cCI6MjA5OTA2NjUxNn0.I90rNFIgonxLHVc_Mh6trlfTOnZ8giHPQHkwT0Jx_xo",
     "VITE_SUPABASE_PROJECT_ID": "lkyqghspjndbqbkpuuxm"
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
-  ]
+  }
 }

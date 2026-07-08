@@ -12,11 +12,7 @@ export const getDashboard = createServerFn({ method: "POST" })
     });
     if (roleError) throw new Error(roleError.message);
     if (!isAdmin) throw new Error("Forbidden");
-    const { supabaseAdmin } = await import(
-      "@/integrations/supabase/client.server"
-    );
-
-    const { data: sessions, error: sErr } = await supabaseAdmin
+    const { data: sessions, error: sErr } = await context.supabase
       .from("call_sessions")
       .select(
         "id, status, created_at, free_ended_at, paid_at, completed_at, ip, user_agent, geo_lat, geo_lng, geo_accuracy, geo_city, geo_region, geo_country, consent_recording, recording_path, has_paid, telegram_chat_id, telegram_username, telegram_sent_at, phone, dispatch_hangup_sent_at, dispatch_no_payment_sent_at, dispatch_post_payment_sent_at, dispatch_scheduled_at, dispatch_reason",
@@ -25,7 +21,7 @@ export const getDashboard = createServerFn({ method: "POST" })
       .limit(200);
     if (sErr) throw new Error(sErr.message);
 
-    const { data: payments, error: pErr } = await supabaseAdmin
+    const { data: payments, error: pErr } = await context.supabase
       .from("payments")
       .select("id, session_id, amount_cents, status, created_at")
       .order("created_at", { ascending: false })
@@ -58,8 +54,7 @@ export const getAdminSettings = createServerFn({ method: "POST" })
     });
     if (roleError) throw new Error(roleError.message);
     if (!isAdmin) throw new Error("Forbidden");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await context.supabase
       .from("settings")
       .select(
         "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, dispatch_price_cents, offer_title, offer_subtitle, contact_url, telegram_bot_username, telegram_copy_template, telegram_purchase_url, start_photo_url, start_video_url, start_message, start_button_text, mini_app_url, dispatch_button_text, dispatch_copy_hangup, dispatch_copy_no_payment, dispatch_copy_post_payment",
@@ -71,7 +66,7 @@ export const getAdminSettings = createServerFn({ method: "POST" })
     const signMedia = async (value: string | null) => {
       if (!value) return null;
       if (value.startsWith("http")) return value;
-      const { data: signed, error: signError } = await supabaseAdmin.storage
+      const { data: signed, error: signError } = await context.supabase.storage
         .from("media")
         .createSignedUrl(value, 60 * 60 * 6);
       if (signError) return value;
@@ -122,8 +117,7 @@ export const updateAdminSettings = createServerFn({ method: "POST" })
     });
     if (roleError) throw new Error(roleError.message);
     if (!isAdmin) throw new Error("Forbidden");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
+    const { error } = await context.supabase
       .from("settings")
       .update(data)
       .eq("id", 1);
@@ -149,11 +143,10 @@ export const getAdminMediaUploadUrl = createServerFn({ method: "POST" })
     });
     if (roleError) throw new Error(roleError.message);
     if (!isAdmin) throw new Error("Forbidden");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const isVideo = data.kind === "video" || data.kind === "start_video";
     const cleanExt = data.ext.replace(/[^a-z0-9]/gi, "") || (isVideo ? "mp4" : "jpg");
     const path = `${data.kind}/${Date.now()}-${crypto.randomUUID()}.${cleanExt}`;
-    const { data: signed, error } = await supabaseAdmin.storage
+    const { data: signed, error } = await context.supabase.storage
       .from("media")
       .createSignedUploadUrl(path);
     if (error) throw new Error(error.message);
@@ -173,10 +166,7 @@ export const getRecordingUrl = createServerFn({ method: "POST" })
     });
     if (roleError) throw new Error(roleError.message);
     if (!isAdmin) throw new Error("Forbidden");
-    const { supabaseAdmin } = await import(
-      "@/integrations/supabase/client.server"
-    );
-    const { data: signed, error } = await supabaseAdmin.storage
+    const { data: signed, error } = await context.supabase.storage
       .from("media")
       .createSignedUrl(data.path, 60 * 60);
     if (error) throw new Error(error.message);

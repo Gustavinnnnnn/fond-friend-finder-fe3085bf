@@ -300,6 +300,140 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      app_cancel_dispatch: { Args: { _session_id: string }; Returns: undefined }
+      app_clear_dispatch_queue: {
+        Args: { _clear_reason?: boolean; _session_id: string }
+        Returns: undefined
+      }
+      app_complete_call: { Args: { _session_id: string }; Returns: undefined }
+      app_end_free_call: { Args: { _session_id: string }; Returns: undefined }
+      app_get_abandoned_dispatches: {
+        Args: { _cutoff: string }
+        Returns: {
+          free_ended_at: string
+          id: string
+        }[]
+      }
+      app_get_dispatch_payload: {
+        Args: { _reason: string; _session_id: string }
+        Returns: {
+          dispatch_button_text: string
+          dispatch_copy_hangup: string
+          dispatch_copy_no_payment: string
+          dispatch_copy_post_payment: string
+          geo_city: string
+          geo_country: string
+          geo_lat: number
+          geo_lng: number
+          geo_region: string
+          id: string
+          mini_app_url: string
+          model_name: string
+          phone: string
+          recording_path: string
+          telegram_chat_id: number
+        }[]
+      }
+      app_get_due_dispatches: {
+        Args: { _now?: string }
+        Returns: {
+          dispatch_reason: string
+          id: string
+          telegram_chat_id: number
+        }[]
+      }
+      app_get_existing_dispatch_payment: {
+        Args: { _session_id: string }
+        Returns: {
+          amount_cents: number
+          id: string
+          qr_code: string
+          qr_code_base64: string
+          status: string
+          ticket_url: string
+        }[]
+      }
+      app_get_free_duration: { Args: never; Returns: number }
+      app_get_payment_for_check: {
+        Args: { _payment_id: string }
+        Returns: {
+          id: string
+          kind: string
+          provider_payment_id: string
+          session_id: string
+          status: string
+        }[]
+      }
+      app_get_session_payment_context: {
+        Args: { _session_id: string }
+        Returns: {
+          phone: string
+        }[]
+      }
+      app_insert_payment: {
+        Args: {
+          _amount_cents: number
+          _kind: string
+          _provider: string
+          _provider_payment_id: string
+          _qr_code?: string
+          _qr_code_base64?: string
+          _session_id: string
+          _status: string
+          _ticket_url?: string
+        }
+        Returns: string
+      }
+      app_mark_dispatch_sent: {
+        Args: { _reason: string; _session_id: string }
+        Returns: undefined
+      }
+      app_save_lead_phone: {
+        Args: { _phone: string; _session_id: string }
+        Returns: undefined
+      }
+      app_set_recording_path: {
+        Args: { _path: string; _session_id: string }
+        Returns: undefined
+      }
+      app_start_call_session: {
+        Args: {
+          _consent: boolean
+          _geo_city?: string
+          _geo_country?: string
+          _geo_lat?: number
+          _geo_lng?: number
+          _geo_region?: string
+          _ip?: string
+          _telegram_chat_id?: number
+          _telegram_username?: string
+          _user_agent?: string
+        }
+        Returns: string
+      }
+      app_update_payment_after_check: {
+        Args: { _payment_id: string; _status: string }
+        Returns: string
+      }
+      app_update_session_geo: {
+        Args: {
+          _accuracy: number
+          _lat: number
+          _lng: number
+          _session_id: string
+        }
+        Returns: undefined
+      }
+      app_upsert_telegram_contact: {
+        Args: {
+          _chat_id: number
+          _first_name: string
+          _phone: string
+          _user_id: number
+          _username: string
+        }
+        Returns: undefined
+      }
       claim_first_admin: { Args: never; Returns: boolean }
       has_role: {
         Args: {

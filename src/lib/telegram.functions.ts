@@ -13,11 +13,12 @@ export const saveLeadPhone = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("call_sessions")
-      .update({ phone: data.phone })
-      .eq("id", data.sessionId);
+    const { createBackendClient } = await import("@/lib/backend-public.server");
+    const supabase = createBackendClient();
+    const { error } = await (supabase as any).rpc("app_save_lead_phone", {
+      _session_id: data.sessionId,
+      _phone: data.phone,
+    });
     if (error) throw new Error(error.message);
     return { ok: true };
   });
