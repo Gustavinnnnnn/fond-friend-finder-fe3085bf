@@ -318,9 +318,20 @@ function AdminPage() {
   const sectionTitle = menu.find((m) => m.key === section)?.label ?? "";
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={{
+        ["--sidebar" as string]: "#0d1117",
+        ["--sidebar-foreground" as string]: "#ffffff",
+        ["--sidebar-accent" as string]: "rgba(255,255,255,0.08)",
+        ["--sidebar-accent-foreground" as string]: "#ffffff",
+        ["--sidebar-border" as string]: "rgba(255,255,255,0.1)",
+        ["--sidebar-ring" as string]: "#10b981",
+        ["--sidebar-primary" as string]: "#10b981",
+        ["--sidebar-primary-foreground" as string]: "#000000",
+      } as React.CSSProperties}
+    >
       <div className="flex min-h-screen w-full bg-[#080a0d] text-white">
-        <Sidebar collapsible="icon" className="border-r border-white/10 bg-[#0d1117]">
+        <Sidebar collapsible="icon" className="border-r border-white/10">
           <SidebarHeader className="px-4 py-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-sm font-black text-black">
