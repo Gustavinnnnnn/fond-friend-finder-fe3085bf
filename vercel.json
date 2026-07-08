@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "bun run build",
+  "installCommand": "bun install",
+  "outputDirectory": ".output/public",
+  "framework": null,
+  "regions": ["gru1"],
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ],
+  "env": {
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_PUBLISHABLE_KEY": "@supabase_publishable_key",
+    "VITE_SUPABASE_URL": "@supabase_url",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "@supabase_publishable_key",
+    "VITE_SUPABASE_PROJECT_ID": "@supabase_project_id",
+    "PARADISE_API_KEY": "@paradise_api_key",
+    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token"
+  }
+}
