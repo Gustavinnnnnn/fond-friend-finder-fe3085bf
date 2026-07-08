@@ -2,6 +2,44 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 
+// ---------- Get client IP from Cloudflare / proxy headers ----------
+function getClientIp() {
+  const cf = getRequestHeader("cf-connecting-ip");
+  if (cf) return cf;
+  const fwd = getRequestHeader("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0]?.trim() ?? null;
+  const real = getRequestHeader("x-real-ip");
+  return real ?? null;
+}
+
+async function lookupGeoFromIp(ip: string | null) {
+  if (!ip || ip === "127.0.0.1" || ip === "::1") return null;
+  try {
+    const res = await fetch(
+      `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+      { headers: { "User-Agent": "call-app/1.0" } },
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      city?: string;
+      region?: string;
+      country_name?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    return {
+      city: j.city ?? null,
+      region: j.region ?? null,
+      country: j.country_name ?? null,
+      lat: j.latitude ?? null,
+      lng: j.longitude ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 // ---------- helpers ----------
 async function getAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
