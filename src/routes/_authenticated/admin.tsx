@@ -112,7 +112,7 @@ type Stats = {
   revenueCents: number;
 };
 
-type Section = "dashboard" | "leads" | "payments" | "locations" | "settings";
+type Section = "dashboard" | "leads" | "dispatches" | "payments" | "locations" | "settings";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -326,6 +326,7 @@ function AdminPage() {
   const menu: { key: Section; label: string; icon: React.ReactNode }[] = [
     { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
     { key: "leads", label: "Chamadas", icon: <Users className="h-4 w-4" /> },
+    { key: "dispatches", label: "Disparos", icon: <Send className="h-4 w-4" /> },
     { key: "payments", label: "Pagamentos", icon: <CreditCard className="h-4 w-4" /> },
     { key: "locations", label: "Localização", icon: <Globe2 className="h-4 w-4" /> },
     { key: "settings", label: "Configurações", icon: <SettingsIcon className="h-4 w-4" /> },
