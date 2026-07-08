@@ -115,7 +115,7 @@ function CallPage() {
 
   // Load settings
   useEffect(() => {
-    getSettingsFn()
+    getSettingsFn({})
       .then((data) => setSettings(data as Settings))
       .catch((error) => console.error(error));
   }, [getSettingsFn]);
