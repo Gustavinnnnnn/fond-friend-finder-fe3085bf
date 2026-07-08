@@ -19,6 +19,26 @@ export async function tgCall<T = unknown>(
   method: string,
   body: Record<string, unknown>,
 ): Promise<T> {
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  if (TELEGRAM_BOT_TOKEN) {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      console.error(`Telegram ${method} failed [${res.status}]: ${text}`);
+      throw new Error(`Telegram ${method} failed: ${text}`);
+    }
+    const json = JSON.parse(text) as { ok: boolean; result?: T; description?: string };
+    if (!json.ok) {
+      console.error(`Telegram ${method} !ok: ${json.description}`);
+      throw new Error(json.description ?? `Telegram ${method} failed`);
+    }
+    return json.result as T;
+  }
+
   const LOVABLE_API_KEY = requireEnv("LOVABLE_API_KEY");
   const TELEGRAM_API_KEY = requireEnv("TELEGRAM_API_KEY");
   const res = await fetch(`${GATEWAY_URL}/${method}`, {
@@ -59,7 +79,6 @@ type SessionRow = {
 
 type SettingsRow = {
   model_name: string;
-  telegram_purchase_url: string | null;
   dispatch_button_text: string;
   dispatch_copy_hangup: string;
   dispatch_copy_no_payment: string;
@@ -72,8 +91,9 @@ type SettingsRow = {
 };
 
 async function signedUrl(path: string, expiresSec: number): Promise<string | null> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.storage.from("media").createSignedUrl(path, expiresSec);
+  const { createBackendClient } = await import("@/lib/backend-public.server");
+  const supabase = createBackendClient();
+  const { data, error } = await supabase.storage.from("media").createSignedUrl(path, expiresSec);
   if (error) return null;
   return data.signedUrl;
 }
@@ -84,36 +104,44 @@ function copyFor(reason: DispatchReason, settings: SettingsRow): string {
   return settings.dispatch_copy_post_payment;
 }
 
-function sentColumnFor(reason: DispatchReason): string {
-  if (reason === "hangup") return "dispatch_hangup_sent_at";
-  if (reason === "no_payment") return "dispatch_no_payment_sent_at";
-  return "dispatch_post_payment_sent_at";
-}
-
 export async function dispatchToLead(
   sessionId: string,
   reason: DispatchReason,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { createBackendClient } = await import("@/lib/backend-public.server");
+  const supabase = createBackendClient();
 
-  const { data: session, error: sErr } = await supabaseAdmin
-    .from("call_sessions")
-    .select(
-      "id, recording_path, geo_city, geo_region, geo_country, geo_lat, geo_lng, telegram_chat_id, phone",
-    )
-    .eq("id", sessionId)
-    .single<SessionRow>();
-  if (sErr || !session) return { ok: false, reason: "sessão não encontrada" };
+  const { data: rows, error: sErr } = await (supabase as any).rpc("app_get_dispatch_payload", {
+    _session_id: sessionId,
+    _reason: reason,
+  });
+  const payload = Array.isArray(rows) ? rows[0] : null;
+  if (sErr || !payload) return { ok: false, reason: "sessão não encontrada" };
+  const session: SessionRow = {
+    id: payload.id,
+    recording_path: payload.recording_path,
+    geo_city: payload.geo_city,
+    geo_region: payload.geo_region,
+    geo_country: payload.geo_country,
+    geo_lat: payload.geo_lat,
+    geo_lng: payload.geo_lng,
+    telegram_chat_id: payload.telegram_chat_id,
+    phone: payload.phone,
+  };
   if (!session.telegram_chat_id) return { ok: false, reason: "lead sem telegram_chat_id" };
 
-  const { data: settings, error: setErr } = await supabaseAdmin
-    .from("settings")
-    .select(
-      "model_name, telegram_purchase_url, dispatch_button_text, dispatch_copy_hangup, dispatch_copy_no_payment, dispatch_copy_post_payment, start_photo_url, start_video_url, start_message, start_button_text, mini_app_url",
-    )
-    .eq("id", 1)
-    .single<SettingsRow>();
-  if (setErr || !settings) return { ok: false, reason: "configurações não encontradas" };
+  const settings: SettingsRow = {
+    model_name: payload.model_name,
+    dispatch_button_text: payload.dispatch_button_text,
+    dispatch_copy_hangup: payload.dispatch_copy_hangup,
+    dispatch_copy_no_payment: payload.dispatch_copy_no_payment,
+    dispatch_copy_post_payment: payload.dispatch_copy_post_payment,
+    start_photo_url: null,
+    start_video_url: null,
+    start_message: "",
+    start_button_text: "",
+    mini_app_url: payload.mini_app_url,
+  };
 
   const chatId = session.telegram_chat_id;
 
@@ -182,26 +210,19 @@ export async function dispatchToLead(
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
 
-  const now = new Date().toISOString();
-  const patch: Record<string, string | null> = {
-    telegram_sent_at: now,
-    dispatch_scheduled_at: null,
-    dispatch_reason: null,
-  };
-  patch[sentColumnFor(reason)] = now;
-  await supabaseAdmin
-    .from("call_sessions")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(patch as any)
-    .eq("id", sessionId);
+  await (supabase as any).rpc("app_mark_dispatch_sent", {
+    _session_id: sessionId,
+    _reason: reason,
+  });
 
   return { ok: true };
 }
 
 // Called on /start: send welcome media + message + WebApp button to open the call
 export async function sendStartWelcome(chatId: number): Promise<void> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: settings } = await supabaseAdmin
+  const { createBackendClient } = await import("@/lib/backend-public.server");
+  const supabase = createBackendClient();
+  const { data: settings } = await supabase
     .from("settings")
     .select("start_photo_url, start_video_url, start_message, start_button_text, mini_app_url")
     .eq("id", 1)
