@@ -547,7 +547,7 @@ function CallPage() {
           ) : null}
 
           {phase === "offer" ? (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/85 px-6 text-center backdrop-blur-md">
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 overflow-y-auto bg-black/85 px-6 py-8 text-center backdrop-blur-md">
               <div className="text-xs uppercase tracking-widest text-white/50">
                 Chamada pausada
               </div>
@@ -557,13 +557,44 @@ function CallPage() {
               <div className="max-w-xs text-sm text-white/70">
                 {settings?.offer_subtitle}
               </div>
-              <div className="mt-2 text-4xl font-bold text-emerald-400">{price}</div>
+              <div className="mt-1 text-4xl font-bold text-emerald-400">{price}</div>
               <button
                 onClick={startPayment}
-                className="mt-4 w-full max-w-xs rounded-full bg-emerald-500 py-4 text-base font-semibold shadow-lg shadow-emerald-500/30 transition active:scale-95"
+                className="mt-2 w-full max-w-xs rounded-full bg-emerald-500 py-4 text-base font-semibold shadow-lg shadow-emerald-500/30 transition active:scale-95"
               >
                 Pagar com Pix
               </button>
+
+              {settings?.telegram_bot_username && sessionId ? (
+                <a
+                  href={`https://t.me/${settings.telegram_bot_username.replace(/^@/, "")}?start=${sessionId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full max-w-xs items-center justify-center gap-2 rounded-full border-2 border-sky-400 bg-sky-500/10 py-4 text-base font-semibold text-sky-300 transition active:scale-95"
+                >
+                  <Send className="h-5 w-5" /> Receber no Telegram
+                </a>
+              ) : null}
+
+              <div className="w-full max-w-xs">
+                <label className="mb-1 block text-left text-xs text-white/50">
+                  Seu WhatsApp (opcional)
+                </label>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="(11) 90000-0000"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onBlur={() => {
+                    if (phone.length >= 8 && sessionId) {
+                      savePhoneFn({ data: { sessionId, phone } }).catch(console.error);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-base text-white placeholder:text-white/30 focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
               <button
                 onClick={hangUp}
                 className="text-sm text-white/60 underline underline-offset-4"
