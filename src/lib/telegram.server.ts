@@ -1,5 +1,6 @@
 // Server-only helper for Telegram dispatches. Never import in client code.
 import { createHash } from "crypto";
+import { getTelegramBotToken } from "@/lib/runtime-credentials.server";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
@@ -19,7 +20,7 @@ export async function tgCall<T = unknown>(
   method: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const TELEGRAM_BOT_TOKEN = await getTelegramBotToken();
   if (TELEGRAM_BOT_TOKEN) {
     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
       method: "POST",

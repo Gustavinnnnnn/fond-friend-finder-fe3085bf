@@ -1,3 +1,5 @@
+import { getParadiseApiKey } from "@/lib/runtime-credentials.server";
+
 const PARADISE_BASE = "https://multi.paradisepags.com/api/v1";
 
 function stripBase64Prefix(v: string | null | undefined): string | null {
@@ -27,8 +29,8 @@ export async function paradiseCreatePix(args: {
   qrCode: string;
   qrCodeBase64: string;
 }> {
-  const token = process.env.PARADISE_API_KEY;
-  if (!token) throw new Error("PARADISE_API_KEY não configurado");
+  const token = await getParadiseApiKey();
+  if (!token) throw new Error("Chave da Paradise não configurada. Adicione em Configurações → Credenciais.");
 
   const phone = onlyDigits(args.phone) || "11999999999";
   const safeRef = args.reference.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 48);
@@ -89,7 +91,7 @@ export async function paradiseCreatePix(args: {
 }
 
 export async function paradiseGetStatus(transactionId: string): Promise<string | null> {
-  const token = process.env.PARADISE_API_KEY;
+  const token = await getParadiseApiKey();
   if (!token) return null;
   const res = await fetch(
     `${PARADISE_BASE}/query.php?action=get_transaction&id=${encodeURIComponent(transactionId)}`,

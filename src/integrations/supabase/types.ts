@@ -179,11 +179,13 @@ export type Database = {
           model_photo_url: string | null
           offer_subtitle: string
           offer_title: string
+          paradise_api_key: string | null
           price_cents: number
           start_button_text: string
           start_message: string
           start_photo_url: string | null
           start_video_url: string | null
+          telegram_bot_token: string | null
           telegram_bot_username: string | null
           telegram_copy_template: string
           telegram_purchase_url: string | null
@@ -205,11 +207,13 @@ export type Database = {
           model_photo_url?: string | null
           offer_subtitle?: string
           offer_title?: string
+          paradise_api_key?: string | null
           price_cents?: number
           start_button_text?: string
           start_message?: string
           start_photo_url?: string | null
           start_video_url?: string | null
+          telegram_bot_token?: string | null
           telegram_bot_username?: string | null
           telegram_copy_template?: string
           telegram_purchase_url?: string | null
@@ -231,11 +235,13 @@ export type Database = {
           model_photo_url?: string | null
           offer_subtitle?: string
           offer_title?: string
+          paradise_api_key?: string | null
           price_cents?: number
           start_button_text?: string
           start_message?: string
           start_photo_url?: string | null
           start_video_url?: string | null
+          telegram_bot_token?: string | null
           telegram_bot_username?: string | null
           telegram_copy_template?: string
           telegram_purchase_url?: string | null
@@ -362,6 +368,13 @@ export type Database = {
           provider_payment_id: string
           session_id: string
           status: string
+        }[]
+      }
+      app_get_runtime_credentials: {
+        Args: never
+        Returns: {
+          paradise_api_key: string
+          telegram_bot_token: string
         }[]
       }
       app_get_session_payment_context: {
