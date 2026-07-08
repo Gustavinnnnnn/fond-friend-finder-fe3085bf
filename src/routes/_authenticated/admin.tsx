@@ -837,7 +837,7 @@ function SettingsView({
             />
           </div>
           <div>
-            <Label className="text-white/80">Valor (R$)</Label>
+            <Label className="text-white/80">Valor da chamada (R$)</Label>
             <Input
               type="number"
               step="0.01"
@@ -851,6 +851,25 @@ function SettingsView({
               }
               className="mt-1 border-neutral-700 bg-neutral-800 text-white"
             />
+          </div>
+          <div>
+            <Label className="text-white/80">Valor do disparo (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={(settings.dispatch_price_cents / 100).toFixed(2)}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  dispatch_price_cents: Math.round(parseFloat(e.target.value || "0") * 100),
+                })
+              }
+              className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+            />
+            <p className="mt-1 text-xs text-white/45">
+              Cobrado quando o lead clica em "Continuar minha compra" no Telegram.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <Label className="text-white/80">Título da oferta</Label>
