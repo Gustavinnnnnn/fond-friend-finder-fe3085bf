@@ -47,7 +47,6 @@ import {
   CreditCard,
   Settings as SettingsIcon,
   Globe2,
-  Menu,
   RefreshCw,
 } from "lucide-react";
 
@@ -320,15 +319,22 @@ function AdminPage() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-neutral-950 text-white">
-        <Sidebar collapsible="icon">
-          <SidebarHeader className="px-4 py-4">
-            <div className="text-sm font-bold">Painel</div>
-            <div className="text-xs text-muted-foreground">Chamada</div>
+      <div className="flex min-h-screen w-full bg-[#080a0d] text-white">
+        <Sidebar collapsible="icon" className="border-r border-white/10 bg-[#0d1117]">
+          <SidebarHeader className="px-4 py-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-sm font-black text-black">
+                7
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold">Seven Calls</div>
+                <div className="truncate text-xs text-white/45">Administração</div>
+              </div>
+            </div>
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Menu</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-white/35">Menu</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {menu.map((m) => (
@@ -336,6 +342,7 @@ function AdminPage() {
                       <SidebarMenuButton
                         isActive={section === m.key}
                         onClick={() => setSection(m.key)}
+                        className="h-11 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white data-[active=true]:bg-emerald-500 data-[active=true]:font-semibold data-[active=true]:text-black"
                       >
                         {m.icon}
                         <span>{m.label}</span>
@@ -347,20 +354,34 @@ function AdminPage() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="p-3">
-            <Button variant="ghost" size="sm" onClick={handleSignOut} className="justify-start">
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="justify-start text-white/65 hover:bg-white/10 hover:text-white">
               <LogOut className="mr-2 h-4 w-4" /> Sair
             </Button>
           </SidebarFooter>
         </Sidebar>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-neutral-800 bg-neutral-950/80 px-4 backdrop-blur">
-            <SidebarTrigger className="text-white" />
-            <h1 className="text-lg font-semibold">{sectionTitle}</h1>
+          <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-white/10 bg-[#080a0d]/90 px-4 backdrop-blur-xl sm:px-6">
+            <SidebarTrigger className="h-10 w-10 rounded-xl border border-white/10 bg-white/5 text-white hover:bg-white/10" />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-xl font-semibold">{sectionTitle}</h1>
+              <div className="text-xs text-white/45">Atualiza automaticamente a cada 15s</div>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                loadDashboard();
+                if (section === "settings") loadSettings();
+              }}
+              className="hidden bg-white/10 text-white hover:bg-white/15 sm:inline-flex"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
+            </Button>
           </header>
 
-          <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6">
-            <div className="mx-auto max-w-6xl">
+          <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl">
               {section === "dashboard" ? (
                 <DashboardView
                   stats={stats}
