@@ -30,8 +30,12 @@ export type Database = {
           id: string
           ip: string | null
           paid_at: string | null
+          phone: string | null
           recording_path: string | null
           status: string
+          telegram_chat_id: number | null
+          telegram_sent_at: string | null
+          telegram_username: string | null
           updated_at: string
           user_agent: string | null
         }
@@ -50,8 +54,12 @@ export type Database = {
           id?: string
           ip?: string | null
           paid_at?: string | null
+          phone?: string | null
           recording_path?: string | null
           status?: string
+          telegram_chat_id?: number | null
+          telegram_sent_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
           user_agent?: string | null
         }
@@ -70,8 +78,12 @@ export type Database = {
           id?: string
           ip?: string | null
           paid_at?: string | null
+          phone?: string | null
           recording_path?: string | null
           status?: string
+          telegram_chat_id?: number | null
+          telegram_sent_at?: string | null
+          telegram_username?: string | null
           updated_at?: string
           user_agent?: string | null
         }
@@ -138,6 +150,9 @@ export type Database = {
           offer_subtitle: string
           offer_title: string
           price_cents: number
+          telegram_bot_username: string | null
+          telegram_copy_template: string
+          telegram_purchase_url: string | null
           updated_at: string
           video_url: string | null
         }
@@ -151,6 +166,9 @@ export type Database = {
           offer_subtitle?: string
           offer_title?: string
           price_cents?: number
+          telegram_bot_username?: string | null
+          telegram_copy_template?: string
+          telegram_purchase_url?: string | null
           updated_at?: string
           video_url?: string | null
         }
@@ -164,6 +182,9 @@ export type Database = {
           offer_subtitle?: string
           offer_title?: string
           price_cents?: number
+          telegram_bot_username?: string | null
+          telegram_copy_template?: string
+          telegram_purchase_url?: string | null
           updated_at?: string
           video_url?: string | null
         }
