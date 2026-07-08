@@ -167,6 +167,7 @@ export type Database = {
         Row: {
           contact_url: string | null
           created_at: string
+          dispatch_button_text: string
           dispatch_copy_hangup: string
           dispatch_copy_no_payment: string
           dispatch_copy_post_payment: string
@@ -192,6 +193,7 @@ export type Database = {
         Insert: {
           contact_url?: string | null
           created_at?: string
+          dispatch_button_text?: string
           dispatch_copy_hangup?: string
           dispatch_copy_no_payment?: string
           dispatch_copy_post_payment?: string
@@ -217,6 +219,7 @@ export type Database = {
         Update: {
           contact_url?: string | null
           created_at?: string
+          dispatch_button_text?: string
           dispatch_copy_hangup?: string
           dispatch_copy_no_payment?: string
           dispatch_copy_post_payment?: string
