@@ -70,6 +70,7 @@ type Settings = {
   start_message: string;
   start_button_text: string;
   mini_app_url: string | null;
+  dispatch_button_text: string;
   dispatch_copy_hangup: string;
   dispatch_copy_no_payment: string;
   dispatch_copy_post_payment: string;
@@ -226,6 +227,7 @@ function AdminPage() {
         start_message: data.start_message,
         start_button_text: data.start_button_text,
         mini_app_url: data.mini_app_url,
+        dispatch_button_text: data.dispatch_button_text,
         dispatch_copy_hangup: data.dispatch_copy_hangup,
         dispatch_copy_no_payment: data.dispatch_copy_no_payment,
         dispatch_copy_post_payment: data.dispatch_copy_post_payment,
@@ -270,6 +272,7 @@ function AdminPage() {
           start_message: settings.start_message,
           start_button_text: settings.start_button_text,
           mini_app_url: settings.mini_app_url,
+          dispatch_button_text: settings.dispatch_button_text,
           dispatch_copy_hangup: settings.dispatch_copy_hangup,
           dispatch_copy_no_payment: settings.dispatch_copy_no_payment,
           dispatch_copy_post_payment: settings.dispatch_copy_post_payment,
