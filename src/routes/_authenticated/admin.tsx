@@ -9,6 +9,7 @@ import {
   getRecordingUrl,
   updateAdminSettings,
 } from "@/lib/admin.functions";
+import { redispatchTelegram } from "@/lib/telegram.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,8 @@ import {
   Settings as SettingsIcon,
   Globe2,
   RefreshCw,
+  Send,
+  Clock,
 } from "lucide-react";
 
 type Settings = {
