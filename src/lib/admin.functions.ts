@@ -1,19 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-async function assertAdmin(ctx: {
-  supabase: Awaited<
-    ReturnType<typeof import("@/integrations/supabase/client").supabase.auth.getSession>
-  > extends never
-    ? never
-    : ReturnType<
-        typeof import("@/integrations/supabase/client")["supabase"]["from"]
-      > extends never
-      ? never
-      : import("@supabase/supabase-js").SupabaseClient;
-  userId: string;
-}) {
+async function assertAdmin(ctx: { supabase: SupabaseClient; userId: string }) {
   const { data, error } = await ctx.supabase.rpc("has_role", {
     _user_id: ctx.userId,
     _role: "admin",
@@ -21,6 +11,7 @@ async function assertAdmin(ctx: {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden");
 }
+
 
 // Bootstrap: current signed-in user claims admin if no admin exists yet.
 export const claimAdmin = createServerFn({ method: "POST" })
