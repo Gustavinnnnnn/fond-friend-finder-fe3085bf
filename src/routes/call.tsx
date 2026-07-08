@@ -370,7 +370,7 @@ function CallPage() {
         // Paid call finished by hanging up → send post_payment dispatch now
         postPaymentDispatchFn({ data: { sessionId: sid } }).catch(console.error);
       } else if (wasMidCall) {
-        // Hung up before the free call ended → schedule hangup dispatch in 3 min
+        // Hung up before the free call ended → send hangup dispatch now
         scheduleHangupFn({ data: { sessionId: sid } }).catch(console.error);
       }
     }
