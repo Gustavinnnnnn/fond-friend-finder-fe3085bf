@@ -813,6 +813,73 @@ function SettingsView({
           {saving ? "Salvando…" : "Salvar alterações"}
         </Button>
       </Card>
+
+      <Card className="border-sky-500/30 bg-neutral-900 p-5 text-white">
+        <div className="mb-4 flex items-center gap-2">
+          <Send className="h-5 w-5 text-sky-400" />
+          <h2 className="text-lg font-semibold">Disparo no Telegram</h2>
+        </div>
+        <p className="mb-4 text-xs text-white/60">
+          O lead abre <code className="rounded bg-black/40 px-1">t.me/SEU_BOT?start=&lt;id&gt;</code> na tela de pagamento,
+          aperta <b>Start</b> e a mensagem abaixo é enviada automaticamente. Variáveis:{" "}
+          <code className="text-sky-300">{"{cidade}"}</code>{" "}
+          <code className="text-sky-300">{"{estado}"}</code>{" "}
+          <code className="text-sky-300">{"{video_link}"}</code>{" "}
+          <code className="text-sky-300">{"{compra_link}"}</code>{" "}
+          <code className="text-sky-300">{"{modelo}"}</code>
+        </p>
+        <div className="grid gap-4">
+          <div>
+            <Label className="text-white/80">Username do bot (sem @)</Label>
+            <Input
+              placeholder="MeuBot"
+              value={settings.telegram_bot_username ?? ""}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  telegram_bot_username: e.target.value.trim() || null,
+                })
+              }
+              className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+            />
+            <div className="mt-1 text-xs text-white/40">
+              Ex.: se seu bot é @MinhaModeloBot, digite <b>MinhaModeloBot</b>
+            </div>
+          </div>
+          <div>
+            <Label className="text-white/80">Link de compra (Paradise / checkout)</Label>
+            <Input
+              placeholder="https://pay.paradisepagamentos.com/..."
+              value={settings.telegram_purchase_url ?? ""}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  telegram_purchase_url: e.target.value.trim() || null,
+                })
+              }
+              className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+            />
+          </div>
+          <div>
+            <Label className="text-white/80">Copy global da mensagem</Label>
+            <Textarea
+              rows={10}
+              value={settings.telegram_copy_template}
+              onChange={(e) =>
+                setSettings({ ...settings, telegram_copy_template: e.target.value })
+              }
+              className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
+            />
+          </div>
+        </div>
+        <Button
+          onClick={onSave}
+          disabled={saving}
+          className="mt-4 bg-sky-500 hover:bg-sky-600"
+        >
+          {saving ? "Salvando…" : "Salvar Telegram"}
+        </Button>
+      </Card>
     </div>
   );
 }
