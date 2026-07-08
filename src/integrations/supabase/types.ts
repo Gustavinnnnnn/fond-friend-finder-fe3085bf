@@ -19,6 +19,11 @@ export type Database = {
           completed_at: string | null
           consent_recording: boolean
           created_at: string
+          dispatch_hangup_sent_at: string | null
+          dispatch_no_payment_sent_at: string | null
+          dispatch_post_payment_sent_at: string | null
+          dispatch_reason: string | null
+          dispatch_scheduled_at: string | null
           free_ended_at: string | null
           geo_accuracy: number | null
           geo_city: string | null
@@ -30,6 +35,7 @@ export type Database = {
           id: string
           ip: string | null
           paid_at: string | null
+          payment_button_shown_at: string | null
           phone: string | null
           recording_path: string | null
           status: string
@@ -43,6 +49,11 @@ export type Database = {
           completed_at?: string | null
           consent_recording?: boolean
           created_at?: string
+          dispatch_hangup_sent_at?: string | null
+          dispatch_no_payment_sent_at?: string | null
+          dispatch_post_payment_sent_at?: string | null
+          dispatch_reason?: string | null
+          dispatch_scheduled_at?: string | null
           free_ended_at?: string | null
           geo_accuracy?: number | null
           geo_city?: string | null
@@ -54,6 +65,7 @@ export type Database = {
           id?: string
           ip?: string | null
           paid_at?: string | null
+          payment_button_shown_at?: string | null
           phone?: string | null
           recording_path?: string | null
           status?: string
@@ -67,6 +79,11 @@ export type Database = {
           completed_at?: string | null
           consent_recording?: boolean
           created_at?: string
+          dispatch_hangup_sent_at?: string | null
+          dispatch_no_payment_sent_at?: string | null
+          dispatch_post_payment_sent_at?: string | null
+          dispatch_reason?: string | null
+          dispatch_scheduled_at?: string | null
           free_ended_at?: string | null
           geo_accuracy?: number | null
           geo_city?: string | null
@@ -78,6 +95,7 @@ export type Database = {
           id?: string
           ip?: string | null
           paid_at?: string | null
+          payment_button_shown_at?: string | null
           phone?: string | null
           recording_path?: string | null
           status?: string
@@ -143,13 +161,21 @@ export type Database = {
         Row: {
           contact_url: string | null
           created_at: string
+          dispatch_copy_hangup: string
+          dispatch_copy_no_payment: string
+          dispatch_copy_post_payment: string
           free_duration_seconds: number
           id: number
+          mini_app_url: string | null
           model_name: string
           model_photo_url: string | null
           offer_subtitle: string
           offer_title: string
           price_cents: number
+          start_button_text: string
+          start_message: string
+          start_photo_url: string | null
+          start_video_url: string | null
           telegram_bot_username: string | null
           telegram_copy_template: string
           telegram_purchase_url: string | null
@@ -159,13 +185,21 @@ export type Database = {
         Insert: {
           contact_url?: string | null
           created_at?: string
+          dispatch_copy_hangup?: string
+          dispatch_copy_no_payment?: string
+          dispatch_copy_post_payment?: string
           free_duration_seconds?: number
           id?: number
+          mini_app_url?: string | null
           model_name?: string
           model_photo_url?: string | null
           offer_subtitle?: string
           offer_title?: string
           price_cents?: number
+          start_button_text?: string
+          start_message?: string
+          start_photo_url?: string | null
+          start_video_url?: string | null
           telegram_bot_username?: string | null
           telegram_copy_template?: string
           telegram_purchase_url?: string | null
@@ -175,13 +209,21 @@ export type Database = {
         Update: {
           contact_url?: string | null
           created_at?: string
+          dispatch_copy_hangup?: string
+          dispatch_copy_no_payment?: string
+          dispatch_copy_post_payment?: string
           free_duration_seconds?: number
           id?: number
+          mini_app_url?: string | null
           model_name?: string
           model_photo_url?: string | null
           offer_subtitle?: string
           offer_title?: string
           price_cents?: number
+          start_button_text?: string
+          start_message?: string
+          start_photo_url?: string | null
+          start_video_url?: string | null
           telegram_bot_username?: string | null
           telegram_copy_template?: string
           telegram_purchase_url?: string | null

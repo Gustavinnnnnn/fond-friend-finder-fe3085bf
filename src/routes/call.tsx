@@ -12,10 +12,27 @@ import {
   getRecordingUploadUrl,
   confirmRecordingUploaded,
   getCallSettings,
+  scheduleHangupDispatch,
+  schedulePaymentDispatch,
+  cancelScheduledDispatch,
+  dispatchPostPayment,
 } from "@/lib/call.functions";
 import { saveLeadPhone } from "@/lib/telegram.functions";
 import { toast } from "sonner";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Phone, Send } from "lucide-react";
+
+// Telegram Mini App shim
+type TelegramWebApp = {
+  initDataUnsafe?: { user?: { id?: number; username?: string; first_name?: string } };
+  ready?: () => void;
+  expand?: () => void;
+  close?: () => void;
+};
+function getTelegramWebApp(): TelegramWebApp | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { Telegram?: { WebApp?: TelegramWebApp } };
+  return w.Telegram?.WebApp ?? null;
+}
 
 type Settings = {
   model_name: string;
@@ -111,6 +128,21 @@ function CallPage() {
   const confirmUploadFn = useServerFn(confirmRecordingUploaded);
   const getSettingsFn = useServerFn(getCallSettings);
   const savePhoneFn = useServerFn(saveLeadPhone);
+  const scheduleHangupFn = useServerFn(scheduleHangupDispatch);
+  const schedulePaymentFn = useServerFn(schedulePaymentDispatch);
+  const cancelDispatchFn = useServerFn(cancelScheduledDispatch);
+  const postPaymentDispatchFn = useServerFn(dispatchPostPayment);
+
+  const hasPaidRef = useRef(false);
+
+  // Signal Telegram Mini App is ready + expanded
+  useEffect(() => {
+    const tg = getTelegramWebApp();
+    if (tg) {
+      tg.ready?.();
+      tg.expand?.();
+    }
+  }, []);
 
   const [phone, setPhone] = useState("");
 
@@ -205,7 +237,7 @@ function CallPage() {
     await uploadRecording();
   }, [uploadRecording]);
 
-  // Free-call timeout: save the experimental recording as soon as the free part ends.
+  // Free-call timeout: save the recording + schedule the "no payment in 3min" dispatch
   useEffect(() => {
     if (phase !== "in_call" || !settings || !sessionId) return;
     if (freeEndedRef.current) return;
@@ -217,8 +249,10 @@ function CallPage() {
         .then(() => streamRef.current?.getTracks().forEach((t) => t.stop()))
         .catch(console.error);
       endFreeFn({ data: { sessionId } }).catch(console.error);
+      // Schedule the "no_payment" dispatch (3 min); cancelled if they pay.
+      schedulePaymentFn({ data: { sessionId } }).catch(console.error);
     }
-  }, [elapsed, endFreeFn, phase, sessionId, settings, stopAndUploadRecording]);
+  }, [elapsed, endFreeFn, phase, sessionId, settings, stopAndUploadRecording, schedulePaymentFn]);
 
   // Answer button — auto-accepts the recording notice.
   const handleAnswer = useCallback(async () => {
@@ -231,8 +265,16 @@ function CallPage() {
       });
       streamRef.current = stream;
 
-      // Start server session with consent flag + IP-derived geo
-      const { sessionId: sid } = await startCallFn({ data: { consent: true } });
+      // Pull Telegram Mini App identity (if opened inside Telegram)
+      const tg = getTelegramWebApp();
+      const tgUser = tg?.initDataUnsafe?.user;
+      const telegramChatId = tgUser?.id ?? null;
+      const telegramUsername = tgUser?.username ?? null;
+
+      // Start server session with consent flag + IP-derived geo + telegram identity
+      const { sessionId: sid } = await startCallFn({
+        data: { consent: true, telegramChatId, telegramUsername },
+      });
 
       setSessionId(sid);
       sessionIdRef.current = sid;
@@ -318,14 +360,29 @@ function CallPage() {
 
 
   const hangUp = useCallback(async () => {
+    const wasMidCall = phase === "in_call" && !freeEndedRef.current;
     await finalize();
+    const sid = sessionIdRef.current;
+    if (sid) {
+      if (hasPaidRef.current) {
+        // Paid call finished by hanging up → send post_payment dispatch now
+        postPaymentDispatchFn({ data: { sessionId: sid } }).catch(console.error);
+      } else if (wasMidCall) {
+        // Hung up before the free call ended → schedule hangup dispatch in 3 min
+        scheduleHangupFn({ data: { sessionId: sid } }).catch(console.error);
+      }
+    }
     setPhase("finished");
-  }, [finalize]);
+  }, [finalize, phase, postPaymentDispatchFn, scheduleHangupFn]);
 
   const handleVideoEnded = useCallback(async () => {
     await finalize();
+    const sid = sessionIdRef.current;
+    if (sid && hasPaidRef.current) {
+      postPaymentDispatchFn({ data: { sessionId: sid } }).catch(console.error);
+    }
     setPhase("finished");
-  }, [finalize]);
+  }, [finalize, postPaymentDispatchFn]);
 
   const startPayment = useCallback(async () => {
     if (!sessionId) return;
@@ -352,6 +409,10 @@ function CallPage() {
           if (cancelled) return;
           if (status === "approved") {
             freeEndedRef.current = false;
+            hasPaidRef.current = true;
+            // Cancel the scheduled "no_payment" dispatch
+            const sid = sessionIdRef.current;
+            if (sid) cancelDispatchFn({ data: { sessionId: sid } }).catch(console.error);
             streamRef.current?.getVideoTracks().forEach((t) => (t.enabled = camOn));
             streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = micOn));
             await modelVideoRef.current?.play().catch(() => {});
@@ -379,7 +440,7 @@ function CallPage() {
     return () => {
       cancelled = true;
     };
-  }, [phase, paymentInfo, checkPayFn, camOn, micOn, settings]);
+  }, [phase, paymentInfo, checkPayFn, camOn, micOn, settings, cancelDispatchFn]);
 
   const copyPix = useCallback(() => {
     if (!paymentInfo?.qrCode) return;

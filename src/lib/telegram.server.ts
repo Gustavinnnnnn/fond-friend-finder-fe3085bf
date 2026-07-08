@@ -15,7 +15,7 @@ export function deriveTelegramWebhookSecret(telegramApiKey: string): string {
     .digest("base64url");
 }
 
-async function tgCall<T = unknown>(
+export async function tgCall<T = unknown>(
   method: string,
   body: Record<string, unknown>,
 ): Promise<T> {
@@ -43,6 +43,8 @@ async function tgCall<T = unknown>(
   return json.result as T;
 }
 
+export type DispatchReason = "hangup" | "no_payment" | "post_payment";
+
 type SessionRow = {
   id: string;
   recording_path: string | null;
@@ -52,57 +54,82 @@ type SessionRow = {
   geo_lat: number | null;
   geo_lng: number | null;
   telegram_chat_id: number | null;
+  phone: string | null;
 };
 
 type SettingsRow = {
-  telegram_copy_template: string;
-  telegram_purchase_url: string | null;
   model_name: string;
+  telegram_purchase_url: string | null;
+  dispatch_copy_hangup: string;
+  dispatch_copy_no_payment: string;
+  dispatch_copy_post_payment: string;
+  start_photo_url: string | null;
+  start_video_url: string | null;
+  start_message: string;
+  start_button_text: string;
+  mini_app_url: string | null;
 };
 
-export async function dispatchToLead(sessionId: string): Promise<{ ok: boolean; reason?: string }> {
+async function signedUrl(path: string, expiresSec: number): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.storage.from("media").createSignedUrl(path, expiresSec);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+function copyFor(reason: DispatchReason, settings: SettingsRow): string {
+  if (reason === "hangup") return settings.dispatch_copy_hangup;
+  if (reason === "no_payment") return settings.dispatch_copy_no_payment;
+  return settings.dispatch_copy_post_payment;
+}
+
+function sentColumnFor(reason: DispatchReason): string {
+  if (reason === "hangup") return "dispatch_hangup_sent_at";
+  if (reason === "no_payment") return "dispatch_no_payment_sent_at";
+  return "dispatch_post_payment_sent_at";
+}
+
+export async function dispatchToLead(
+  sessionId: string,
+  reason: DispatchReason,
+): Promise<{ ok: boolean; reason?: string }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
   const { data: session, error: sErr } = await supabaseAdmin
     .from("call_sessions")
     .select(
-      "id, recording_path, geo_city, geo_region, geo_country, geo_lat, geo_lng, telegram_chat_id",
+      "id, recording_path, geo_city, geo_region, geo_country, geo_lat, geo_lng, telegram_chat_id, phone",
     )
     .eq("id", sessionId)
     .single<SessionRow>();
   if (sErr || !session) return { ok: false, reason: "sessão não encontrada" };
-  if (!session.telegram_chat_id) return { ok: false, reason: "lead ainda não iniciou o bot" };
+  if (!session.telegram_chat_id) return { ok: false, reason: "lead sem telegram_chat_id" };
 
   const { data: settings, error: setErr } = await supabaseAdmin
     .from("settings")
-    .select("telegram_copy_template, telegram_purchase_url, model_name")
+    .select(
+      "model_name, telegram_purchase_url, dispatch_copy_hangup, dispatch_copy_no_payment, dispatch_copy_post_payment, start_photo_url, start_video_url, start_message, start_button_text, mini_app_url",
+    )
     .eq("id", 1)
     .single<SettingsRow>();
   if (setErr || !settings) return { ok: false, reason: "configurações não encontradas" };
 
-  let videoLink = "(sem gravação)";
-  if (session.recording_path) {
-    const { data: signed } = await supabaseAdmin.storage
-      .from("media")
-      .createSignedUrl(session.recording_path, 60 * 60 * 24 * 7);
-    if (signed?.signedUrl) videoLink = signed.signedUrl;
-  }
-
+  const chatId = session.telegram_chat_id;
   const purchaseUrl = settings.telegram_purchase_url?.trim() || "";
 
-  const text = (settings.telegram_copy_template ?? "")
+  const text = copyFor(reason, settings)
     .replaceAll("{cidade}", session.geo_city ?? "sua cidade")
     .replaceAll("{estado}", session.geo_region ?? "")
     .replaceAll("{pais}", session.geo_country ?? "")
     .replaceAll("{modelo}", settings.model_name ?? "")
-    .replaceAll("{video_link}", videoLink)
+    .replaceAll("{telefone}", session.phone ?? "")
     .replaceAll("{compra_link}", purchaseUrl);
 
-  // 1. Send location if available
+  // 1. Send location (map pin, if we have coords)
   if (session.geo_lat != null && session.geo_lng != null) {
     try {
       await tgCall("sendLocation", {
-        chat_id: session.telegram_chat_id,
+        chat_id: chatId,
         latitude: session.geo_lat,
         longitude: session.geo_lng,
       });
@@ -111,26 +138,104 @@ export async function dispatchToLead(sessionId: string): Promise<{ ok: boolean; 
     }
   }
 
-  // 2. Send main message with purchase button
-  const replyMarkup = purchaseUrl
-    ? {
-        inline_keyboard: [[{ text: "💳 Continuar minha compra", url: purchaseUrl }]],
+  // 2. Send the actual recorded video as a Telegram video (not a link)
+  if (session.recording_path) {
+    const url = await signedUrl(session.recording_path, 60 * 60 * 24);
+    if (url) {
+      try {
+        await tgCall("sendVideo", {
+          chat_id: chatId,
+          video: url,
+          caption: `Gravação da chamada — ${session.geo_city ?? ""} ${session.geo_region ? "/ " + session.geo_region : ""}`.trim(),
+          supports_streaming: true,
+        });
+      } catch (err) {
+        console.warn("sendVideo failed, falling back to document", err);
+        try {
+          await tgCall("sendDocument", { chat_id: chatId, document: url });
+        } catch (e2) {
+          console.error("sendDocument fallback failed", e2);
+        }
       }
+    }
+  }
+
+  // 3. Main copy with purchase button
+  const replyMarkup = purchaseUrl
+    ? { inline_keyboard: [[{ text: "💳 Continuar minha compra", url: purchaseUrl }]] }
     : undefined;
 
   await tgCall("sendMessage", {
-    chat_id: session.telegram_chat_id,
+    chat_id: chatId,
     text,
-    disable_web_page_preview: false,
+    disable_web_page_preview: true,
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
 
+  const now = new Date().toISOString();
+  const patch: Record<string, string | null> = {
+    telegram_sent_at: now,
+    dispatch_scheduled_at: null,
+    dispatch_reason: null,
+  };
+  patch[sentColumnFor(reason)] = now;
   await supabaseAdmin
     .from("call_sessions")
-    .update({ telegram_sent_at: new Date().toISOString() })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(patch as any)
     .eq("id", sessionId);
 
   return { ok: true };
+}
+
+// Called on /start: send welcome media + message + WebApp button to open the call
+export async function sendStartWelcome(chatId: number): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: settings } = await supabaseAdmin
+    .from("settings")
+    .select("start_photo_url, start_video_url, start_message, start_button_text, mini_app_url")
+    .eq("id", 1)
+    .single<SettingsRow>();
+  if (!settings) return;
+
+  const resolveMedia = async (value: string | null): Promise<string | null> => {
+    if (!value) return null;
+    if (value.startsWith("http")) return value;
+    return await signedUrl(value, 60 * 60 * 24);
+  };
+
+  const photo = await resolveMedia(settings.start_photo_url);
+  const video = await resolveMedia(settings.start_video_url);
+
+  if (photo) {
+    try {
+      await tgCall("sendPhoto", { chat_id: chatId, photo });
+    } catch (err) {
+      console.warn("sendPhoto (start) failed", err);
+    }
+  }
+
+  if (video) {
+    try {
+      await tgCall("sendVideo", { chat_id: chatId, video, supports_streaming: true });
+    } catch (err) {
+      console.warn("sendVideo (start) failed", err);
+    }
+  }
+
+  const miniAppUrl = settings.mini_app_url?.trim();
+  const buttonText = settings.start_button_text?.trim() || "📞 Entrar na chamada";
+  const message = settings.start_message?.trim() || "Bem-vindo(a)!";
+
+  const replyMarkup = miniAppUrl
+    ? { inline_keyboard: [[{ text: buttonText, web_app: { url: miniAppUrl } }]] }
+    : undefined;
+
+  await tgCall("sendMessage", {
+    chat_id: chatId,
+    text: message,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
 }
 
 export async function sendPlainMessage(chatId: number, text: string): Promise<void> {

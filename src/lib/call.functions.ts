@@ -40,8 +40,19 @@ export const getCallSettings = createServerFn({ method: "GET" }).handler(async (
 
 // ---------- Start call session ----------
 export const startCallSession = createServerFn({ method: "POST" })
-  .inputValidator((data: { consent: boolean }) =>
-    z.object({ consent: z.boolean() }).parse(data),
+  .inputValidator(
+    (data: {
+      consent: boolean;
+      telegramChatId?: number | null;
+      telegramUsername?: string | null;
+    }) =>
+      z
+        .object({
+          consent: z.boolean(),
+          telegramChatId: z.number().int().nullish(),
+          telegramUsername: z.string().max(64).nullish(),
+        })
+        .parse(data),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -91,6 +102,8 @@ export const startCallSession = createServerFn({ method: "POST" })
         user_agent: userAgent,
         ip,
         consent_recording: data.consent,
+        telegram_chat_id: data.telegramChatId ?? null,
+        telegram_username: data.telegramUsername ?? null,
         geo_city: geo?.city ?? null,
         geo_region: geo?.region ?? null,
         geo_country: geo?.country ?? null,
@@ -353,4 +366,91 @@ export const checkPayment = createServerFn({ method: "POST" })
     }
 
     return { status: mp.status };
+  });
+
+// ---------- Schedule "hangup" dispatch (lead hung up before free ended) ----------
+export const scheduleHangupDispatch = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) =>
+    z.object({ sessionId: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Only schedule if the lead came from Telegram (has chat_id) and no dispatch was sent
+    const { data: row } = await supabaseAdmin
+      .from("call_sessions")
+      .select("telegram_chat_id, dispatch_hangup_sent_at, has_paid")
+      .eq("id", data.sessionId)
+      .maybeSingle();
+    if (!row?.telegram_chat_id || row.dispatch_hangup_sent_at || row.has_paid) {
+      return { ok: true, scheduled: false };
+    }
+    const scheduledAt = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const { error } = await supabaseAdmin
+      .from("call_sessions")
+      .update({ dispatch_scheduled_at: scheduledAt, dispatch_reason: "hangup" })
+      .eq("id", data.sessionId);
+    if (error) throw new Error(error.message);
+    return { ok: true, scheduled: true };
+  });
+
+// ---------- Payment button shown → schedule "no_payment" dispatch in 3min ----------
+export const schedulePaymentDispatch = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) =>
+    z.object({ sessionId: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("call_sessions")
+      .select("telegram_chat_id, dispatch_no_payment_sent_at, has_paid")
+      .eq("id", data.sessionId)
+      .maybeSingle();
+    if (!row?.telegram_chat_id || row.dispatch_no_payment_sent_at || row.has_paid) {
+      return { ok: true, scheduled: false };
+    }
+    const scheduledAt = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const { error } = await supabaseAdmin
+      .from("call_sessions")
+      .update({
+        payment_button_shown_at: new Date().toISOString(),
+        dispatch_scheduled_at: scheduledAt,
+        dispatch_reason: "no_payment",
+      })
+      .eq("id", data.sessionId);
+    if (error) throw new Error(error.message);
+    return { ok: true, scheduled: true };
+  });
+
+// ---------- Cancel any pending dispatch (e.g. after they pay) ----------
+export const cancelScheduledDispatch = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) =>
+    z.object({ sessionId: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("call_sessions")
+      .update({ dispatch_scheduled_at: null, dispatch_reason: null })
+      .eq("id", data.sessionId);
+    return { ok: true };
+  });
+
+// ---------- Send "post_payment" dispatch immediately (after paid call finished) ----------
+export const dispatchPostPayment = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) =>
+    z.object({ sessionId: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row } = await supabaseAdmin
+      .from("call_sessions")
+      .select("telegram_chat_id, dispatch_post_payment_sent_at")
+      .eq("id", data.sessionId)
+      .maybeSingle();
+    if (!row?.telegram_chat_id || row.dispatch_post_payment_sent_at) {
+      return { ok: true, sent: false };
+    }
+    const { dispatchToLead } = await import("@/lib/telegram.server");
+    const res = await dispatchToLead(data.sessionId, "post_payment");
+    return { ok: res.ok, sent: res.ok, reason: res.reason };
   });

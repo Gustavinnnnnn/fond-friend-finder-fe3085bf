@@ -22,11 +22,17 @@ export const saveLeadPhone = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Admin: manually re-dispatch a lead (in case auto failed or you edited the copy)
+// Admin: manually re-dispatch a lead for a chosen reason
 export const redispatchTelegram = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { sessionId: string }) =>
-    z.object({ sessionId: z.string().uuid() }).parse(data),
+  .inputValidator(
+    (data: { sessionId: string; reason?: "hangup" | "no_payment" | "post_payment" }) =>
+      z
+        .object({
+          sessionId: z.string().uuid(),
+          reason: z.enum(["hangup", "no_payment", "post_payment"]).default("hangup"),
+        })
+        .parse(data),
   )
   .handler(async ({ data, context }) => {
     const { data: isAdmin, error } = await context.supabase.rpc("has_role", {
@@ -36,7 +42,7 @@ export const redispatchTelegram = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     if (!isAdmin) throw new Error("Forbidden");
     const { dispatchToLead } = await import("@/lib/telegram.server");
-    const res = await dispatchToLead(data.sessionId);
+    const res = await dispatchToLead(data.sessionId, data.reason);
     if (!res.ok) throw new Error(res.reason ?? "Falha no disparo");
     return { ok: true };
   });

@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "crypto";
-import { deriveTelegramWebhookSecret, dispatchToLead, sendPlainMessage } from "@/lib/telegram.server";
+import {
+  deriveTelegramWebhookSecret,
+  sendPlainMessage,
+  sendStartWelcome,
+} from "@/lib/telegram.server";
 
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -46,48 +50,14 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
 
         const text = (message.text ?? "").trim();
         const chatId = message.chat.id;
-        const username = message.from.username ?? null;
 
-        // /start <sessionId>
-        const startMatch = text.match(/^\/start(?:\s+([a-f0-9-]{36}))?/i);
-        if (startMatch) {
-          const sessionId = startMatch[1];
-          if (!sessionId) {
-            await sendPlainMessage(
-              chatId,
-              "Olá! Abra o link pela tela de pagamento para eu conseguir te identificar.",
-            );
-            return Response.json({ ok: true });
-          }
-
-          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-          const { data: session } = await supabaseAdmin
-            .from("call_sessions")
-            .select("id")
-            .eq("id", sessionId)
-            .maybeSingle();
-
-          if (!session) {
-            await sendPlainMessage(chatId, "Não encontrei sua chamada. Abra o link de novo pela tela de pagamento.");
-            return Response.json({ ok: true });
-          }
-
-          await supabaseAdmin
-            .from("call_sessions")
-            .update({
-              telegram_chat_id: chatId,
-              telegram_username: username,
-            })
-            .eq("id", sessionId);
-
-          await sendPlainMessage(chatId, "✅ Pronto! Em instantes você recebe seus dados aqui.");
-
-          // Fire-and-await dispatch so we surface errors in logs
+        // Any /start (with or without payload) triggers the welcome flow
+        if (/^\/start(\b|$)/i.test(text)) {
           try {
-            await dispatchToLead(sessionId);
+            await sendStartWelcome(chatId);
           } catch (err) {
-            console.error("auto-dispatch failed", err);
-            await sendPlainMessage(chatId, "Tive um problema pra montar sua mensagem. Vou te chamar em instantes.");
+            console.error("sendStartWelcome failed", err);
+            await sendPlainMessage(chatId, "Oi! Tive um problema aqui, tenta de novo em instantes 💋");
           }
           return Response.json({ ok: true });
         }

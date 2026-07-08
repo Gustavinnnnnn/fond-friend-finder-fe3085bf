@@ -63,13 +63,22 @@ type Settings = {
   offer_subtitle: string;
   contact_url: string | null;
   telegram_bot_username: string | null;
-  telegram_copy_template: string;
   telegram_purchase_url: string | null;
+  start_photo_url: string | null;
+  start_video_url: string | null;
+  start_message: string;
+  start_button_text: string;
+  mini_app_url: string | null;
+  dispatch_copy_hangup: string;
+  dispatch_copy_no_payment: string;
+  dispatch_copy_post_payment: string;
 };
 
 type AdminSettingsResponse = Settings & {
   model_photo_preview_url: string | null;
   video_preview_url: string | null;
+  start_photo_preview_url: string | null;
+  start_video_preview_url: string | null;
 };
 
 type Session = {
@@ -94,6 +103,11 @@ type Session = {
   telegram_username: string | null;
   telegram_sent_at: string | null;
   phone: string | null;
+  dispatch_hangup_sent_at: string | null;
+  dispatch_no_payment_sent_at: string | null;
+  dispatch_post_payment_sent_at: string | null;
+  dispatch_scheduled_at: string | null;
+  dispatch_reason: string | null;
 };
 
 type Payment = {
@@ -148,11 +162,13 @@ function AdminPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<"video" | "photo" | null>(null);
+  const [uploading, setUploading] = useState<"video" | "photo" | "start_photo" | "start_video" | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [section, setSection] = useState<Section>("dashboard");
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [startPhotoPreviewUrl, setStartPhotoPreviewUrl] = useState<string | null>(null);
+  const [startVideoPreviewUrl, setStartVideoPreviewUrl] = useState<string | null>(null);
 
   const dashboardFn = useServerFn(getDashboard);
   const recordingUrlFn = useServerFn(getRecordingUrl);
@@ -202,11 +218,20 @@ function AdminPage() {
         offer_subtitle: data.offer_subtitle,
         contact_url: data.contact_url,
         telegram_bot_username: data.telegram_bot_username,
-        telegram_copy_template: data.telegram_copy_template,
         telegram_purchase_url: data.telegram_purchase_url,
+        start_photo_url: data.start_photo_url,
+        start_video_url: data.start_video_url,
+        start_message: data.start_message,
+        start_button_text: data.start_button_text,
+        mini_app_url: data.mini_app_url,
+        dispatch_copy_hangup: data.dispatch_copy_hangup,
+        dispatch_copy_no_payment: data.dispatch_copy_no_payment,
+        dispatch_copy_post_payment: data.dispatch_copy_post_payment,
       });
       setPhotoPreviewUrl(data.model_photo_preview_url);
       setVideoPreviewUrl(data.video_preview_url);
+      setStartPhotoPreviewUrl(data.start_photo_preview_url);
+      setStartVideoPreviewUrl(data.start_video_preview_url);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Falha ao carregar configurações";
       toast.error(msg);
@@ -227,17 +252,24 @@ function AdminPage() {
     try {
       await updateSettingsFn({
         data: {
-        model_name: settings.model_name,
-        model_photo_url: settings.model_photo_url,
-        video_url: settings.video_url,
-        free_duration_seconds: settings.free_duration_seconds,
-        price_cents: settings.price_cents,
-        offer_title: settings.offer_title,
-        offer_subtitle: settings.offer_subtitle,
-        contact_url: settings.contact_url,
-        telegram_bot_username: settings.telegram_bot_username,
-        telegram_copy_template: settings.telegram_copy_template,
-        telegram_purchase_url: settings.telegram_purchase_url,
+          model_name: settings.model_name,
+          model_photo_url: settings.model_photo_url,
+          video_url: settings.video_url,
+          free_duration_seconds: settings.free_duration_seconds,
+          price_cents: settings.price_cents,
+          offer_title: settings.offer_title,
+          offer_subtitle: settings.offer_subtitle,
+          contact_url: settings.contact_url,
+          telegram_bot_username: settings.telegram_bot_username,
+          telegram_purchase_url: settings.telegram_purchase_url,
+          start_photo_url: settings.start_photo_url,
+          start_video_url: settings.start_video_url,
+          start_message: settings.start_message,
+          start_button_text: settings.start_button_text,
+          mini_app_url: settings.mini_app_url,
+          dispatch_copy_hangup: settings.dispatch_copy_hangup,
+          dispatch_copy_no_payment: settings.dispatch_copy_no_payment,
+          dispatch_copy_post_payment: settings.dispatch_copy_post_payment,
         },
       });
       await loadSettings();
@@ -250,10 +282,14 @@ function AdminPage() {
     }
   };
 
-  const handleUpload = async (file: File, kind: "video" | "photo") => {
+  const handleUpload = async (
+    file: File,
+    kind: "video" | "photo" | "start_photo" | "start_video",
+  ) => {
     setUploading(kind);
     try {
-      const ext = file.name.split(".").pop() || (kind === "video" ? "mp4" : "jpg");
+      const isVideo = kind === "video" || kind === "start_video";
+      const ext = file.name.split(".").pop() || (isVideo ? "mp4" : "jpg");
       const { path, token } = await uploadUrlFn({ data: { kind, ext } });
       const { error } = await supabase.storage
         .from("media")
@@ -263,11 +299,17 @@ function AdminPage() {
       if (kind === "video") {
         setSettings((prev) => (prev ? { ...prev, video_url: path } : prev));
         setVideoPreviewUrl(localPreview);
-      } else {
+      } else if (kind === "photo") {
         setSettings((prev) => (prev ? { ...prev, model_photo_url: path } : prev));
         setPhotoPreviewUrl(localPreview);
+      } else if (kind === "start_photo") {
+        setSettings((prev) => (prev ? { ...prev, start_photo_url: path } : prev));
+        setStartPhotoPreviewUrl(localPreview);
+      } else {
+        setSettings((prev) => (prev ? { ...prev, start_video_url: path } : prev));
+        setStartVideoPreviewUrl(localPreview);
       }
-      toast.success(`${kind === "video" ? "Vídeo" : "Foto"} enviado. Clique em Salvar.`);
+      toast.success("Arquivo enviado. Clique em Salvar.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro no upload";
       toast.error(msg);
@@ -448,6 +490,8 @@ function AdminPage() {
                   setSettings={setSettings}
                   photoPreviewUrl={photoPreviewUrl}
                   videoPreviewUrl={videoPreviewUrl}
+                  startPhotoPreviewUrl={startPhotoPreviewUrl}
+                  startVideoPreviewUrl={startVideoPreviewUrl}
                   saving={saving}
                   uploading={uploading}
                   onSave={handleSave}
@@ -653,6 +697,8 @@ function SettingsView({
   setSettings,
   photoPreviewUrl,
   videoPreviewUrl,
+  startPhotoPreviewUrl,
+  startVideoPreviewUrl,
   saving,
   uploading,
   onSave,
@@ -662,10 +708,12 @@ function SettingsView({
   setSettings: React.Dispatch<React.SetStateAction<Settings | null>>;
   photoPreviewUrl: string | null;
   videoPreviewUrl: string | null;
+  startPhotoPreviewUrl: string | null;
+  startVideoPreviewUrl: string | null;
   saving: boolean;
-  uploading: "video" | "photo" | null;
+  uploading: "video" | "photo" | "start_photo" | "start_video" | null;
   onSave: () => void;
-  onUpload: (f: File, kind: "video" | "photo") => void;
+  onUpload: (f: File, kind: "video" | "photo" | "start_photo" | "start_video") => void;
 }) {
   if (!settings) {
     return <div className="text-sm text-white/60">Carregando configurações…</div>;
@@ -817,67 +865,172 @@ function SettingsView({
       <Card className="border-sky-500/30 bg-neutral-900 p-5 text-white">
         <div className="mb-4 flex items-center gap-2">
           <Send className="h-5 w-5 text-sky-400" />
-          <h2 className="text-lg font-semibold">Disparo no Telegram</h2>
+          <h2 className="text-lg font-semibold">Bot do Telegram — mensagem de /start</h2>
         </div>
         <p className="mb-4 text-xs text-white/60">
-          O lead abre <code className="rounded bg-black/40 px-1">t.me/SEU_BOT?start=&lt;id&gt;</code> na tela de pagamento,
-          aperta <b>Start</b> e a mensagem abaixo é enviada automaticamente. Variáveis:{" "}
-          <code className="text-sky-300">{"{cidade}"}</code>{" "}
-          <code className="text-sky-300">{"{estado}"}</code>{" "}
-          <code className="text-sky-300">{"{video_link}"}</code>{" "}
-          <code className="text-sky-300">{"{compra_link}"}</code>{" "}
-          <code className="text-sky-300">{"{modelo}"}</code>
+          Quando o lead aperta <b>Start</b> no seu bot, o sistema envia (nessa ordem): a foto, o vídeo, e a
+          mensagem com o botão que abre o Mini App da chamada dentro do próprio Telegram.
         </p>
-        <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label className="text-white/80">Username do bot (sem @)</Label>
-            <Input
-              placeholder="MeuBot"
-              value={settings.telegram_bot_username ?? ""}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  telegram_bot_username: e.target.value.trim() || null,
-                })
-              }
+            <div className="mb-2 text-xs text-white/60">Foto (opcional)</div>
+            {startPhotoPreviewUrl ? (
+              <img src={startPhotoPreviewUrl} alt="Start" className="mb-2 aspect-square w-full rounded-lg object-cover" />
+            ) : (
+              <div className="mb-2 flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/40 text-xs text-white/40">
+                Sem foto
+              </div>
+            )}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-3 py-1.5 text-xs">
+              <Upload className="h-3.5 w-3.5" />
+              {uploading === "start_photo" ? "Enviando…" : "Enviar foto"}
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                const f = e.target.files?.[0]; if (f) onUpload(f, "start_photo");
+              }} />
+            </label>
+          </div>
+          <div>
+            <div className="mb-2 text-xs text-white/60">Vídeo (opcional)</div>
+            {startVideoPreviewUrl ? (
+              <video src={startVideoPreviewUrl} controls className="mb-2 aspect-square w-full rounded-lg bg-black object-cover" />
+            ) : (
+              <div className="mb-2 flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-white/20 bg-black/40 text-xs text-white/40">
+                Sem vídeo
+              </div>
+            )}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-3 py-1.5 text-xs">
+              <Upload className="h-3.5 w-3.5" />
+              {uploading === "start_video" ? "Enviando…" : "Enviar vídeo"}
+              <input type="file" accept="video/*" className="hidden" onChange={(e) => {
+                const f = e.target.files?.[0]; if (f) onUpload(f, "start_video");
+              }} />
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4">
+          <div>
+            <Label className="text-white/80">Mensagem enviada logo após a foto/vídeo</Label>
+            <Textarea
+              rows={4}
+              value={settings.start_message}
+              onChange={(e) => setSettings({ ...settings, start_message: e.target.value })}
               className="mt-1 border-neutral-700 bg-neutral-800 text-white"
             />
-            <div className="mt-1 text-xs text-white/40">
-              Ex.: se seu bot é @MinhaModeloBot, digite <b>MinhaModeloBot</b>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label className="text-white/80">Texto do botão que abre a chamada</Label>
+              <Input
+                value={settings.start_button_text}
+                onChange={(e) => setSettings({ ...settings, start_button_text: e.target.value })}
+                className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-white/80">URL do Mini App (deve ser HTTPS)</Label>
+              <Input
+                placeholder="https://project--02757c43-9d59-4dc3-86e6-03d5e9b1fefc-dev.lovable.app/call"
+                value={settings.mini_app_url ?? ""}
+                onChange={(e) => setSettings({ ...settings, mini_app_url: e.target.value.trim() || null })}
+                className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+              />
+              <div className="mt-1 text-xs text-white/40">
+                Cadastre esse mesmo domínio no <b>@BotFather → /newapp</b> como Mini App do seu bot.
+              </div>
             </div>
           </div>
           <div>
-            <Label className="text-white/80">Link de compra (Paradise / checkout)</Label>
+            <Label className="text-white/80">Username do bot (sem @)</Label>
             <Input
-              placeholder="https://pay.paradisepagamentos.com/..."
-              value={settings.telegram_purchase_url ?? ""}
+              placeholder="MinhaModeloBot"
+              value={settings.telegram_bot_username ?? ""}
               onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  telegram_purchase_url: e.target.value.trim() || null,
-                })
+                setSettings({ ...settings, telegram_bot_username: e.target.value.trim() || null })
               }
               className="mt-1 border-neutral-700 bg-neutral-800 text-white"
             />
           </div>
+        </div>
+      </Card>
+
+      <Card className="border-emerald-500/30 bg-neutral-900 p-5 text-white">
+        <div className="mb-4 flex items-center gap-2">
+          <DollarSign className="h-5 w-5 text-emerald-400" />
+          <h2 className="text-lg font-semibold">Link de compra</h2>
+        </div>
+        <Label className="text-white/80">URL do checkout (Paradise / Perfect / etc.)</Label>
+        <Input
+          placeholder="https://pay.paradisepagamentos.com/..."
+          value={settings.telegram_purchase_url ?? ""}
+          onChange={(e) =>
+            setSettings({ ...settings, telegram_purchase_url: e.target.value.trim() || null })
+          }
+          className="mt-1 border-neutral-700 bg-neutral-800 text-white"
+        />
+        <div className="mt-1 text-xs text-white/40">
+          Esse link vira o botão <b>&quot;Continuar minha compra&quot;</b> em todos os disparos.
+        </div>
+      </Card>
+
+      <Card className="border-purple-500/30 bg-neutral-900 p-5 text-white">
+        <div className="mb-4 flex items-center gap-2">
+          <Send className="h-5 w-5 text-purple-400" />
+          <h2 className="text-lg font-semibold">Copies dos 3 disparos</h2>
+        </div>
+        <p className="mb-4 text-xs text-white/60">
+          Cada mensagem é enviada junto com a localização e o vídeo real da chamada. Variáveis:{" "}
+          <code className="text-purple-300">{"{cidade}"}</code>{" "}
+          <code className="text-purple-300">{"{estado}"}</code>{" "}
+          <code className="text-purple-300">{"{pais}"}</code>{" "}
+          <code className="text-purple-300">{"{modelo}"}</code>{" "}
+          <code className="text-purple-300">{"{telefone}"}</code>{" "}
+          <code className="text-purple-300">{"{compra_link}"}</code>
+        </p>
+        <div className="grid gap-4">
           <div>
-            <Label className="text-white/80">Copy global da mensagem</Label>
+            <Label className="text-white/80">
+              1️⃣ Quando o lead <b>desliga antes</b> do fim da chamada grátis
+            </Label>
             <Textarea
-              rows={10}
-              value={settings.telegram_copy_template}
-              onChange={(e) =>
-                setSettings({ ...settings, telegram_copy_template: e.target.value })
-              }
+              rows={5}
+              value={settings.dispatch_copy_hangup}
+              onChange={(e) => setSettings({ ...settings, dispatch_copy_hangup: e.target.value })}
               className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
             />
+            <div className="mt-1 text-xs text-white/40">Disparado 3 min depois que o lead desliga.</div>
+          </div>
+          <div>
+            <Label className="text-white/80">
+              2️⃣ Quando o lead <b>vê o botão de pagar e não paga</b> em 3 min
+            </Label>
+            <Textarea
+              rows={5}
+              value={settings.dispatch_copy_no_payment}
+              onChange={(e) => setSettings({ ...settings, dispatch_copy_no_payment: e.target.value })}
+              className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
+            />
+            <div className="mt-1 text-xs text-white/40">Disparado 3 min depois que a oferta aparece na tela.</div>
+          </div>
+          <div>
+            <Label className="text-white/80">
+              3️⃣ Quando o lead <b>paga e a chamada termina</b>
+            </Label>
+            <Textarea
+              rows={5}
+              value={settings.dispatch_copy_post_payment}
+              onChange={(e) => setSettings({ ...settings, dispatch_copy_post_payment: e.target.value })}
+              className="mt-1 border-neutral-700 bg-neutral-800 font-mono text-sm text-white"
+            />
+            <div className="mt-1 text-xs text-white/40">Disparado imediatamente ao final da chamada paga.</div>
           </div>
         </div>
         <Button
           onClick={onSave}
           disabled={saving}
-          className="mt-4 bg-sky-500 hover:bg-sky-600"
+          className="mt-4 bg-purple-500 hover:bg-purple-600"
         >
-          {saving ? "Salvando…" : "Salvar Telegram"}
+          {saving ? "Salvando…" : "Salvar tudo"}
         </Button>
       </Card>
     </div>
