@@ -293,6 +293,7 @@ export const createPixPayment = createServerFn({ method: "POST" })
       .from("payments")
       .insert({
         session_id: data.sessionId,
+        kind: "call",
         provider: "mercadopago",
         provider_payment_id: String(mp.id),
         amount_cents: amountCents,
