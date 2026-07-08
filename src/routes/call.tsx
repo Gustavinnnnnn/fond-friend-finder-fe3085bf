@@ -217,8 +217,6 @@ function CallPage() {
 
   // Answer button — auto-accepts the recording notice.
   const handleAnswer = useCallback(async () => {
-    if (!settings) return;
-    void 0;
     setPhase("requesting");
 
     try {
