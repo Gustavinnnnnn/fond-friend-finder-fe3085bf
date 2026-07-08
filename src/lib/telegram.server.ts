@@ -115,7 +115,20 @@ export async function dispatchToLead(
   if (setErr || !settings) return { ok: false, reason: "configurações não encontradas" };
 
   const chatId = session.telegram_chat_id;
-  const purchaseUrl = settings.telegram_purchase_url?.trim() || "";
+
+  // Always use our own internal Pix checkout page instead of an external URL,
+  // so the "Continuar minha compra" button opens QR + copia-e-cola directly.
+  const explicitBase = process.env.APP_BASE_URL?.trim();
+  const miniAppBase = (() => {
+    if (!settings.mini_app_url) return null;
+    try {
+      return new URL(settings.mini_app_url).origin;
+    } catch {
+      return null;
+    }
+  })();
+  const baseUrl = explicitBase || miniAppBase || "https://fond-friend-finder.lovable.app";
+  const purchaseUrl = `${baseUrl}/pay/${session.id}`;
 
   const text = copyFor(reason, settings)
     .replaceAll("{cidade}", session.geo_city ?? "sua cidade")
