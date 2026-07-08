@@ -97,6 +97,7 @@ export const updateAdminSettings = createServerFn({ method: "POST" })
         video_url: z.string().nullable(),
         free_duration_seconds: z.number().int().min(1).max(3600),
         price_cents: z.number().int().min(0).max(1000000),
+        dispatch_price_cents: z.number().int().min(0).max(1000000),
         offer_title: z.string().min(1).max(120),
         offer_subtitle: z.string().min(1).max(240),
         contact_url: z.string().nullable(),
