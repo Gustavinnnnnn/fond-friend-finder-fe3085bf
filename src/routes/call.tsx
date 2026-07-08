@@ -74,7 +74,7 @@ function pickRecorderMime() {
 function CallPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [phase, setPhase] = useState<Phase>("ringing");
-  const [consent, setConsent] = useState(false);
+  const [, setConsent] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [elapsed, setElapsed] = useState(0);
