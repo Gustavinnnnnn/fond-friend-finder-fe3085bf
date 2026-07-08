@@ -63,7 +63,6 @@ export const startCallSession = createServerFn({ method: "POST" })
     const fwd = getRequestHeader("x-forwarded-for");
     const real = getRequestHeader("x-real-ip");
     const ip = cf || fwd?.split(",")[0]?.trim() || real || null;
-    let savedPhone: string | null = null;
     let geo: {
       city: string | null;
       region: string | null;
@@ -96,10 +95,6 @@ export const startCallSession = createServerFn({ method: "POST" })
       } catch {
         geo = null;
       }
-    }
-
-    if (data.telegramChatId) {
-      savedPhone = null;
     }
 
     const { data: row, error } = await (supabase as any).rpc("app_start_call_session", {
