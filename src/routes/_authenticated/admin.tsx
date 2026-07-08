@@ -74,6 +74,8 @@ type Settings = {
   dispatch_copy_hangup: string;
   dispatch_copy_no_payment: string;
   dispatch_copy_post_payment: string;
+  paradise_api_key: string | null;
+  telegram_bot_token: string | null;
 };
 
 type AdminSettingsResponse = Settings & {
@@ -231,6 +233,8 @@ function AdminPage() {
         dispatch_copy_hangup: data.dispatch_copy_hangup,
         dispatch_copy_no_payment: data.dispatch_copy_no_payment,
         dispatch_copy_post_payment: data.dispatch_copy_post_payment,
+        paradise_api_key: (data as unknown as { paradise_api_key: string | null }).paradise_api_key ?? null,
+        telegram_bot_token: (data as unknown as { telegram_bot_token: string | null }).telegram_bot_token ?? null,
       });
       setPhotoPreviewUrl(data.model_photo_preview_url);
       setVideoPreviewUrl(data.video_preview_url);
@@ -276,6 +280,8 @@ function AdminPage() {
           dispatch_copy_hangup: settings.dispatch_copy_hangup,
           dispatch_copy_no_payment: settings.dispatch_copy_no_payment,
           dispatch_copy_post_payment: settings.dispatch_copy_post_payment,
+          paradise_api_key: settings.paradise_api_key,
+          telegram_bot_token: settings.telegram_bot_token,
         },
       });
       await loadSettings();
