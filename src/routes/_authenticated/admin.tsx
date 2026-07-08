@@ -991,24 +991,6 @@ function SettingsView({
         </div>
       </Card>
 
-      <Card className="border-emerald-500/30 bg-neutral-900 p-5 text-white">
-        <div className="mb-4 flex items-center gap-2">
-          <DollarSign className="h-5 w-5 text-emerald-400" />
-          <h2 className="text-lg font-semibold">Link de compra</h2>
-        </div>
-        <Label className="text-white/80">URL do checkout (Paradise / Perfect / etc.)</Label>
-        <Input
-          placeholder="https://pay.paradisepagamentos.com/..."
-          value={settings.telegram_purchase_url ?? ""}
-          onChange={(e) =>
-            setSettings({ ...settings, telegram_purchase_url: e.target.value.trim() || null })
-          }
-          className="mt-1 border-neutral-700 bg-neutral-800 text-white"
-        />
-        <div className="mt-1 text-xs text-white/40">
-          Esse link vira o botão <b>&quot;Continuar minha compra&quot;</b> em todos os disparos.
-        </div>
-      </Card>
 
       <Card className="border-purple-500/30 bg-neutral-900 p-5 text-white">
         <div className="mb-4 flex items-center gap-2">

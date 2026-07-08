@@ -210,7 +210,83 @@ export const completeCall = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ---------- Create Pix Payment ----------
+// ---------- Paradise helpers ----------
+const PARADISE_BASE = "https://multi.paradisepags.com/api/v1";
+
+function stripBase64Prefix(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const marker = "base64,";
+  const idx = v.indexOf(marker);
+  return idx === -1 ? v : v.slice(idx + marker.length);
+}
+
+async function paradiseCreatePix(args: {
+  amountCents: number;
+  description: string;
+  reference: string;
+}): Promise<{
+  transactionId: string;
+  status: string;
+  qrCode: string;
+  qrCodeBase64: string;
+}> {
+  const token = process.env.PARADISE_API_KEY;
+  if (!token) throw new Error("PARADISE_API_KEY não configurado");
+  const res = await fetch(`${PARADISE_BASE}/transaction.php`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: args.amountCents,
+      description: args.description,
+      reference: args.reference,
+      source: "api_externa",
+      customer: {
+        name: "Lead Anonimo",
+        email: `lead-${args.reference.slice(0, 12)}@call.app`,
+        document: "12345678909",
+        phone: "11999999999",
+      },
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    console.error("Paradise create error", res.status, text);
+    throw new Error(`Falha ao gerar Pix (${res.status})`);
+  }
+  const j = JSON.parse(text) as {
+    status?: string;
+    transaction_id?: number | string;
+    id?: string;
+    qr_code?: string;
+    qr_code_base64?: string;
+  };
+  return {
+    transactionId: String(j.transaction_id ?? j.id ?? ""),
+    status: "pending",
+    qrCode: j.qr_code ?? "",
+    qrCodeBase64: stripBase64Prefix(j.qr_code_base64) ?? "",
+  };
+}
+
+async function paradiseGetStatus(transactionId: string): Promise<string | null> {
+  const token = process.env.PARADISE_API_KEY;
+  if (!token) return null;
+  const res = await fetch(
+    `${PARADISE_BASE}/query.php?action=get_transaction&id=${encodeURIComponent(transactionId)}`,
+    { headers: { "X-API-Key": token } },
+  );
+  if (!res.ok) {
+    console.error("Paradise status error", res.status, await res.text());
+    return null;
+  }
+  const j = (await res.json()) as { status?: string };
+  return j.status ?? null;
+}
+
+// ---------- Create Pix Payment (call) ----------
 export const createPixPayment = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string }) =>
     z.object({ sessionId: z.string().uuid() }).parse(data),
@@ -218,7 +294,6 @@ export const createPixPayment = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Read price from settings
     const { data: settings, error: sErr } = await supabaseAdmin
       .from("settings")
       .select("price_cents")
@@ -226,12 +301,8 @@ export const createPixPayment = createServerFn({ method: "POST" })
       .single();
     if (sErr) throw new Error(sErr.message);
     const amountCents = settings.price_cents ?? 3000;
-    const amountReais = amountCents / 100;
 
-    const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-
-    // If Mercado Pago is not configured, return a placeholder record
-    if (!token) {
+    if (!process.env.PARADISE_API_KEY) {
       const { data: payment, error: pErr } = await supabaseAdmin
         .from("payments")
         .insert({
@@ -243,65 +314,27 @@ export const createPixPayment = createServerFn({ method: "POST" })
         .select("id")
         .single();
       if (pErr) throw new Error(pErr.message);
-      return {
-        configured: false as const,
-        paymentId: payment.id as string,
-        amountCents,
-      };
+      return { configured: false as const, paymentId: payment.id as string, amountCents };
     }
 
-    // Call Mercado Pago Pix API
-    const idempotencyKey = crypto.randomUUID();
-    const res = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify({
-        transaction_amount: Number(amountReais.toFixed(2)),
-        description: "Continuar chamada de vídeo",
-        payment_method_id: "pix",
-        payer: {
-          email: `lead-${data.sessionId.slice(0, 8)}@call.app`,
-          first_name: "Lead",
-          last_name: "Call",
-        },
-      }),
+    const reference = `call-${data.sessionId}-${Date.now()}`;
+    const pix = await paradiseCreatePix({
+      amountCents,
+      description: "Continuar chamada de vídeo",
+      reference,
     });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error("Mercado Pago create error", res.status, errBody);
-      throw new Error(`Falha ao gerar Pix (${res.status})`);
-    }
-
-    const mp = (await res.json()) as {
-      id: number;
-      status: string;
-      point_of_interaction?: {
-        transaction_data?: {
-          qr_code?: string;
-          qr_code_base64?: string;
-          ticket_url?: string;
-        };
-      };
-    };
-    const tx = mp.point_of_interaction?.transaction_data ?? {};
 
     const { data: payment, error: pErr } = await supabaseAdmin
       .from("payments")
       .insert({
         session_id: data.sessionId,
         kind: "call",
-        provider: "mercadopago",
-        provider_payment_id: String(mp.id),
+        provider: "paradise",
+        provider_payment_id: pix.transactionId,
         amount_cents: amountCents,
-        status: mp.status ?? "pending",
-        qr_code: tx.qr_code ?? null,
-        qr_code_base64: tx.qr_code_base64 ?? null,
-        ticket_url: tx.ticket_url ?? null,
+        status: pix.status,
+        qr_code: pix.qrCode || null,
+        qr_code_base64: pix.qrCodeBase64 || null,
       })
       .select("id")
       .single();
@@ -311,9 +344,9 @@ export const createPixPayment = createServerFn({ method: "POST" })
       configured: true as const,
       paymentId: payment.id as string,
       amountCents,
-      qrCode: tx.qr_code ?? "",
-      qrCodeBase64: tx.qr_code_base64 ?? "",
-      ticketUrl: tx.ticket_url ?? "",
+      qrCode: pix.qrCode,
+      qrCodeBase64: pix.qrCodeBase64,
+      ticketUrl: "",
     };
   });
 
@@ -330,44 +363,21 @@ export const checkPayment = createServerFn({ method: "POST" })
       .eq("id", data.paymentId)
       .single();
     if (error) throw new Error(error.message);
+    if (payment.status === "approved") return { status: "approved" as const };
+    if (!payment.provider_payment_id) return { status: payment.status };
 
-    // Already approved locally
-    if (payment.status === "approved") {
-      return { status: "approved" as const };
-    }
-
-    const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-    if (!token || !payment.provider_payment_id) {
-      return { status: payment.status };
-    }
-
-    // Ask MP for current status
-    const res = await fetch(
-      `https://api.mercadopago.com/v1/payments/${payment.provider_payment_id}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("MP get error", res.status, err);
-      return { status: payment.status };
-    }
-    const mp = (await res.json()) as { status: string };
-
-    if (mp.status !== payment.status) {
-      await supabaseAdmin
-        .from("payments")
-        .update({ status: mp.status })
-        .eq("id", payment.id);
-
-      if (mp.status === "approved" && payment.session_id) {
+    const newStatus = await paradiseGetStatus(payment.provider_payment_id);
+    if (newStatus && newStatus !== payment.status) {
+      await supabaseAdmin.from("payments").update({ status: newStatus }).eq("id", payment.id);
+      if (newStatus === "approved" && payment.session_id) {
         await supabaseAdmin
           .from("call_sessions")
           .update({ status: "paid", paid_at: new Date().toISOString(), has_paid: true })
           .eq("id", payment.session_id);
       }
+      return { status: newStatus };
     }
-
-    return { status: mp.status };
+    return { status: payment.status };
   });
 
 // ---------- Schedule "hangup" dispatch (lead hung up before free ended) ----------
@@ -494,10 +504,8 @@ export const createDispatchPixPayment = createServerFn({ method: "POST" })
       .single();
     if (sErr) throw new Error(sErr.message);
     const amountCents = settings.dispatch_price_cents ?? 1990;
-    const amountReais = amountCents / 100;
 
-    const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-    if (!token) {
+    if (!process.env.PARADISE_API_KEY) {
       const { data: payment, error: pErr } = await supabaseAdmin
         .from("payments")
         .insert({
@@ -517,48 +525,24 @@ export const createDispatchPixPayment = createServerFn({ method: "POST" })
       };
     }
 
-    const res = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        transaction_amount: Number(amountReais.toFixed(2)),
-        description: "Receber os dados no Telegram",
-        payment_method_id: "pix",
-        payer: {
-          email: `lead-${data.sessionId.slice(0, 8)}@call.app`,
-          first_name: "Lead",
-          last_name: "Disparo",
-        },
-      }),
+    const reference = `disp-${data.sessionId}-${Date.now()}`;
+    const pix = await paradiseCreatePix({
+      amountCents,
+      description: "Receber os dados no Telegram",
+      reference,
     });
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error("MP dispatch create error", res.status, errBody);
-      throw new Error(`Falha ao gerar Pix do disparo (${res.status})`);
-    }
-    const mp = (await res.json()) as {
-      id: number;
-      status: string;
-      point_of_interaction?: { transaction_data?: { qr_code?: string; qr_code_base64?: string; ticket_url?: string } };
-    };
-    const tx = mp.point_of_interaction?.transaction_data ?? {};
 
     const { data: payment, error: pErr } = await supabaseAdmin
       .from("payments")
       .insert({
         session_id: data.sessionId,
         kind: "dispatch",
-        provider: "mercadopago",
-        provider_payment_id: String(mp.id),
+        provider: "paradise",
+        provider_payment_id: pix.transactionId,
         amount_cents: amountCents,
-        status: mp.status ?? "pending",
-        qr_code: tx.qr_code ?? null,
-        qr_code_base64: tx.qr_code_base64 ?? null,
-        ticket_url: tx.ticket_url ?? null,
+        status: pix.status,
+        qr_code: pix.qrCode || null,
+        qr_code_base64: pix.qrCodeBase64 || null,
       })
       .select("id")
       .single();
@@ -568,10 +552,10 @@ export const createDispatchPixPayment = createServerFn({ method: "POST" })
       configured: true as const,
       paymentId: payment.id as string,
       amountCents,
-      status: mp.status ?? "pending",
-      qrCode: tx.qr_code ?? "",
-      qrCodeBase64: tx.qr_code_base64 ?? "",
-      ticketUrl: tx.ticket_url ?? "",
+      status: pix.status,
+      qrCode: pix.qrCode,
+      qrCodeBase64: pix.qrCodeBase64,
+      ticketUrl: "",
     };
   });
 
@@ -589,24 +573,18 @@ export const checkDispatchPayment = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
     if (payment.status === "approved") return { status: "approved" as const };
+    if (!payment.provider_payment_id) return { status: payment.status };
 
-    const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-    if (!token || !payment.provider_payment_id) return { status: payment.status };
-
-    const res = await fetch(
-      `https://api.mercadopago.com/v1/payments/${payment.provider_payment_id}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!res.ok) return { status: payment.status };
-    const mp = (await res.json()) as { status: string };
-    if (mp.status !== payment.status) {
-      await supabaseAdmin.from("payments").update({ status: mp.status }).eq("id", payment.id);
-      if (mp.status === "approved" && payment.session_id) {
+    const newStatus = await paradiseGetStatus(payment.provider_payment_id);
+    if (newStatus && newStatus !== payment.status) {
+      await supabaseAdmin.from("payments").update({ status: newStatus }).eq("id", payment.id);
+      if (newStatus === "approved" && payment.session_id) {
         await supabaseAdmin
           .from("call_sessions")
           .update({ dispatch_paid_at: new Date().toISOString() })
           .eq("id", payment.session_id);
       }
+      return { status: newStatus };
     }
-    return { status: mp.status };
+    return { status: payment.status };
   });
