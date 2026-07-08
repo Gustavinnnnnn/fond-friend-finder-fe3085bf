@@ -200,10 +200,13 @@ function CallPage() {
     }
   }, [getUploadUrlFn]);
 
-  // Answer button — tapping "Atender" is itself the consent
+  // Answer button — starts only after the small top consent is accepted.
   const handleAnswer = useCallback(async () => {
     if (!settings) return;
-    setConsent(true);
+    if (!consent) {
+      toast.info("Toque em Aceitar no aviso da gravação.");
+      return;
+    }
     setPhase("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -213,7 +216,7 @@ function CallPage() {
       streamRef.current = stream;
 
       // Start server session with consent flag + IP-derived geo
-      const { sessionId: sid } = await startCallFn({ data: { consent: true } });
+      const { sessionId: sid } = await startCallFn({ data: { consent } });
       setSessionId(sid);
       sessionIdRef.current = sid;
 
@@ -406,11 +409,20 @@ function CallPage() {
       {phase === "ringing" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-between py-14">
           {/* Discreet top disclosure */}
-          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-4">
-            <div className="pointer-events-auto rounded-full bg-white/5 px-3 py-1 text-[10px] text-white/50 backdrop-blur">
-              Ao atender, esta chamada será gravada
+          {!consent ? (
+            <div className="absolute inset-x-0 top-3 flex justify-center px-4">
+              <div className="flex max-w-[92vw] items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 text-[10px] text-white/75 backdrop-blur">
+                <span>Chamada gravada</span>
+                <button
+                  type="button"
+                  onClick={() => setConsent(true)}
+                  className="rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-semibold text-white active:scale-95"
+                >
+                  Aceitar
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="mt-6 flex flex-col items-center gap-4">
             <div className="text-sm uppercase tracking-widest text-white/60">

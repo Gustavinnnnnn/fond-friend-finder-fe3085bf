@@ -26,7 +26,6 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/auth" });
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,21 +41,11 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin + "/admin" },
-        });
-        if (error) throw error;
-        toast.success("Conta criada. Se pediu confirmação, verifique o email.");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
       navigate({ to: (search.redirect as string) || "/admin" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao autenticar";
@@ -72,9 +61,7 @@ function AuthPage() {
         <div>
           <h1 className="text-xl font-semibold">Acesso administrativo</h1>
           <p className="mt-1 text-sm text-white/60">
-            {mode === "signin"
-              ? "Entre na sua conta admin."
-              : "Crie a primeira conta. Ela vira admin automaticamente."}
+            Entre na conta admin já cadastrada.
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -99,7 +86,7 @@ function AuthPage() {
             <Input
               id="password"
               type="password"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              autoComplete="current-password"
               required
               minLength={6}
               value={password}
@@ -112,18 +99,9 @@ function AuthPage() {
             disabled={loading}
             className="w-full bg-emerald-500 text-white hover:bg-emerald-600"
           >
-            {loading ? "Aguarde…" : mode === "signin" ? "Entrar" : "Criar conta"}
+            {loading ? "Aguarde…" : "Entrar"}
           </Button>
         </form>
-        <button
-          type="button"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="w-full text-center text-xs text-white/60 underline underline-offset-4"
-        >
-          {mode === "signin"
-            ? "Ainda não tem conta? Criar a primeira"
-            : "Já tem conta? Entrar"}
-        </button>
       </Card>
     </div>
   );
