@@ -10,6 +10,8 @@ import {
   checkPayment,
   saveGeolocation,
   getRecordingUploadUrl,
+  confirmRecordingUploaded,
+  getCallSettings,
 } from "@/lib/call.functions";
 import { toast } from "sonner";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Phone } from "lucide-react";
@@ -104,6 +106,8 @@ function CallPage() {
   const checkPayFn = useServerFn(checkPayment);
   const saveGeoFn = useServerFn(saveGeolocation);
   const getUploadUrlFn = useServerFn(getRecordingUploadUrl);
+  const confirmUploadFn = useServerFn(confirmRecordingUploaded);
+  const getSettingsFn = useServerFn(getCallSettings);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -111,21 +115,10 @@ function CallPage() {
 
   // Load settings
   useEffect(() => {
-    supabase
-      .from("settings")
-      .select(
-        "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url",
-      )
-      .eq("id", 1)
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error(error);
-          return;
-        }
-        setSettings(data as Settings);
-      });
-  }, []);
+    getSettingsFn()
+      .then((data) => setSettings(data as Settings))
+      .catch((error) => console.error(error));
+  }, [getSettingsFn]);
 
   // Fix camera bug: attach stream to <video> whenever the element mounts (phase changes)
   useEffect(() => {
@@ -196,11 +189,12 @@ function CallPage() {
           upsert: true,
         });
       if (error) throw error;
+      await confirmUploadFn({ data: { sessionId: sid, path } });
     } catch (err) {
       console.error("upload failed", err);
       uploadedRef.current = false;
     }
-  }, [getUploadUrlFn]);
+  }, [confirmUploadFn, getUploadUrlFn]);
 
   // Answer button — auto-accepts the recording notice.
   const handleAnswer = useCallback(async () => {
