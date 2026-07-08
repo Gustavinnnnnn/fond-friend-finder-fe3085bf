@@ -200,13 +200,10 @@ function CallPage() {
     }
   }, [getUploadUrlFn]);
 
-  // Answer button
+  // Answer button — tapping "Atender" is itself the consent
   const handleAnswer = useCallback(async () => {
     if (!settings) return;
-    if (!consent) {
-      toast.error("Você precisa autorizar a gravação para continuar.");
-      return;
-    }
+    setConsent(true);
     setPhase("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
