@@ -17,30 +17,60 @@ export type Database = {
       call_sessions: {
         Row: {
           completed_at: string | null
+          consent_recording: boolean
           created_at: string
           free_ended_at: string | null
+          geo_accuracy: number | null
+          geo_city: string | null
+          geo_country: string | null
+          geo_lat: number | null
+          geo_lng: number | null
+          geo_region: string | null
+          has_paid: boolean
           id: string
+          ip: string | null
           paid_at: string | null
+          recording_path: string | null
           status: string
           updated_at: string
           user_agent: string | null
         }
         Insert: {
           completed_at?: string | null
+          consent_recording?: boolean
           created_at?: string
           free_ended_at?: string | null
+          geo_accuracy?: number | null
+          geo_city?: string | null
+          geo_country?: string | null
+          geo_lat?: number | null
+          geo_lng?: number | null
+          geo_region?: string | null
+          has_paid?: boolean
           id?: string
+          ip?: string | null
           paid_at?: string | null
+          recording_path?: string | null
           status?: string
           updated_at?: string
           user_agent?: string | null
         }
         Update: {
           completed_at?: string | null
+          consent_recording?: boolean
           created_at?: string
           free_ended_at?: string | null
+          geo_accuracy?: number | null
+          geo_city?: string | null
+          geo_country?: string | null
+          geo_lat?: number | null
+          geo_lng?: number | null
+          geo_region?: string | null
+          has_paid?: boolean
           id?: string
+          ip?: string | null
           paid_at?: string | null
+          recording_path?: string | null
           status?: string
           updated_at?: string
           user_agent?: string | null

