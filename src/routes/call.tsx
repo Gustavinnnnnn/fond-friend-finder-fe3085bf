@@ -200,13 +200,10 @@ function CallPage() {
     }
   }, [getUploadUrlFn]);
 
-  // Answer button
+  // Answer button — tapping "Atender" is itself the consent
   const handleAnswer = useCallback(async () => {
     if (!settings) return;
-    if (!consent) {
-      toast.error("Você precisa autorizar a gravação para continuar.");
-      return;
-    }
+    setConsent(true);
     setPhase("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -408,7 +405,14 @@ function CallPage() {
 
       {phase === "ringing" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-between py-14">
-          <div className="flex flex-col items-center gap-4">
+          {/* Discreet top disclosure */}
+          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-4">
+            <div className="pointer-events-auto rounded-full bg-white/5 px-3 py-1 text-[10px] text-white/50 backdrop-blur">
+              Ao atender, esta chamada será gravada
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col items-center gap-4">
             <div className="text-sm uppercase tracking-widest text-white/60">
               Chamada de vídeo
             </div>
@@ -422,40 +426,25 @@ function CallPage() {
             <div className="animate-pulse text-sm text-white/70">chamando...</div>
           </div>
 
-          <div className="flex w-full flex-col items-center gap-6 px-6">
-            <label className="flex max-w-xs items-start gap-3 rounded-2xl border border-white/10 bg-black/50 p-3 text-left text-xs text-white/80 backdrop-blur">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-emerald-500"
-              />
-              <span>
-                Autorizo a gravação de vídeo, áudio e localização durante esta
-                chamada para fins de segurança e verificação.
-              </span>
-            </label>
-
-            <div className="flex w-full items-center justify-around">
-              <button
-                onClick={() => setPhase("finished")}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-500/40 transition active:scale-95"
-                aria-label="Recusar"
-              >
-                <PhoneOff className="h-7 w-7" />
-              </button>
-              <button
-                onClick={handleAnswer}
-                disabled={!consent}
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 transition active:scale-95 disabled:opacity-40"
-                aria-label="Atender"
-              >
-                <Phone className="h-7 w-7" />
-              </button>
-            </div>
+          <div className="flex w-full items-center justify-around px-10">
+            <button
+              onClick={() => setPhase("finished")}
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-500/40 transition active:scale-95"
+              aria-label="Recusar"
+            >
+              <PhoneOff className="h-7 w-7" />
+            </button>
+            <button
+              onClick={handleAnswer}
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/40 transition active:scale-95"
+              aria-label="Atender"
+            >
+              <Phone className="h-7 w-7" />
+            </button>
           </div>
         </div>
       ) : null}
+
 
       {phase === "requesting" ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 px-8 text-center">
