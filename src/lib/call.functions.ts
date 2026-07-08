@@ -2,53 +2,41 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 
-// ---------- Get client IP from Cloudflare / proxy headers ----------
-function getClientIp() {
-  const cf = getRequestHeader("cf-connecting-ip");
-  if (cf) return cf;
-  const fwd = getRequestHeader("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]?.trim() ?? null;
-  const real = getRequestHeader("x-real-ip");
-  return real ?? null;
-}
-
-async function lookupGeoFromIp(ip: string | null) {
-  if (!ip || ip === "127.0.0.1" || ip === "::1") return null;
-  try {
-    const res = await fetch(
-      `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
-      { headers: { "User-Agent": "call-app/1.0" } },
-    );
-    if (!res.ok) return null;
-    const j = (await res.json()) as {
-      city?: string;
-      region?: string;
-      country_name?: string;
-      latitude?: number;
-      longitude?: number;
-    };
-    return {
-      city: j.city ?? null,
-      region: j.region ?? null,
-      country: j.country_name ?? null,
-      lat: j.latitude ?? null,
-      lng: j.longitude ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-
-// ---------- helpers ----------
-async function getAdmin() {
+// Public data only: returns signed media URLs for the private media bucket.
+export const getCallSettings = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
-}
+  const { data, error } = await supabaseAdmin
+    .from("settings")
+    .select(
+      "model_name, model_photo_url, video_url, free_duration_seconds, price_cents, offer_title, offer_subtitle, contact_url",
+    )
+    .eq("id", 1)
+    .single();
 
-function getPriceCents(settings: { price_cents: number | null }) {
-  return settings.price_cents ?? 3000;
-}
+  if (error) throw new Error(error.message);
+
+  const signMedia = async (value: string | null) => {
+    if (!value) return null;
+    let path = value;
+    if (value.startsWith("http")) {
+      const marker = "/media/";
+      const index = value.indexOf(marker);
+      if (index === -1) return value;
+      path = decodeURIComponent(value.slice(index + marker.length).split("?")[0] ?? "");
+    }
+    const { data: signed, error: signError } = await supabaseAdmin.storage
+      .from("media")
+      .createSignedUrl(path, 60 * 60 * 6);
+    if (signError) return value;
+    return signed.signedUrl;
+  };
+
+  return {
+    ...data,
+    model_photo_url: await signMedia(data.model_photo_url),
+    video_url: await signMedia(data.video_url),
+  };
+});
 
 // ---------- Start call session ----------
 export const startCallSession = createServerFn({ method: "POST" })
@@ -56,12 +44,47 @@ export const startCallSession = createServerFn({ method: "POST" })
     z.object({ consent: z.boolean() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const userAgent = getRequestHeader("user-agent") ?? null;
-    const ip = getClientIp();
-    const geo = await lookupGeoFromIp(ip);
+    const cf = getRequestHeader("cf-connecting-ip");
+    const fwd = getRequestHeader("x-forwarded-for");
+    const real = getRequestHeader("x-real-ip");
+    const ip = cf || fwd?.split(",")[0]?.trim() || real || null;
+    let geo: {
+      city: string | null;
+      region: string | null;
+      country: string | null;
+      lat: number | null;
+      lng: number | null;
+    } | null = null;
 
-    const { data: row, error } = await admin
+    if (ip && ip !== "127.0.0.1" && ip !== "::1") {
+      try {
+        const res = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
+          headers: { "User-Agent": "call-app/1.0" },
+        });
+        if (res.ok) {
+          const j = (await res.json()) as {
+            city?: string;
+            region?: string;
+            country_name?: string;
+            latitude?: number;
+            longitude?: number;
+          };
+          geo = {
+            city: j.city ?? null,
+            region: j.region ?? null,
+            country: j.country_name ?? null,
+            lat: j.latitude ?? null,
+            lng: j.longitude ?? null,
+          };
+        }
+      } catch {
+        geo = null;
+      }
+    }
+
+    const { data: row, error } = await supabaseAdmin
       .from("call_sessions")
       .insert({
         status: "started",
@@ -95,8 +118,8 @@ export const saveGeolocation = createServerFn({ method: "POST" })
         .parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
-    const { error } = await admin
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("call_sessions")
       .update({
         geo_lat: data.lat,
@@ -119,17 +142,28 @@ export const getRecordingUploadUrl = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
-    const path = `recordings/${data.sessionId}.${data.ext.replace(/[^a-z0-9]/gi, "")}`;
-    const { data: signed, error } = await admin.storage
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanExt = data.ext.replace(/[^a-z0-9]/gi, "") || "webm";
+    const path = `recordings/${data.sessionId}-${Date.now()}.${cleanExt}`;
+    const { data: signed, error } = await supabaseAdmin.storage
       .from("media")
       .createSignedUploadUrl(path);
     if (error) throw new Error(error.message);
-    await admin
+    return { path, token: signed.token };
+  });
+
+export const confirmRecordingUploaded = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string; path: string }) =>
+    z.object({ sessionId: z.string().uuid(), path: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("call_sessions")
-      .update({ recording_path: path })
+      .update({ recording_path: data.path })
       .eq("id", data.sessionId);
-    return { signedUrl: signed.signedUrl, path, token: signed.token };
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });
 
 
@@ -139,8 +173,8 @@ export const endFreeCall = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
-    const { error } = await admin
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("call_sessions")
       .update({ status: "free_ended", free_ended_at: new Date().toISOString() })
       .eq("id", data.sessionId);
@@ -154,8 +188,8 @@ export const completeCall = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
-    const { error } = await admin
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("call_sessions")
       .update({ status: "completed", completed_at: new Date().toISOString() })
       .eq("id", data.sessionId);
@@ -169,23 +203,23 @@ export const createPixPayment = createServerFn({ method: "POST" })
     z.object({ sessionId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Read price from settings
-    const { data: settings, error: sErr } = await admin
+    const { data: settings, error: sErr } = await supabaseAdmin
       .from("settings")
       .select("price_cents")
       .eq("id", 1)
       .single();
     if (sErr) throw new Error(sErr.message);
-    const amountCents = getPriceCents(settings);
+    const amountCents = settings.price_cents ?? 3000;
     const amountReais = amountCents / 100;
 
     const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
     // If Mercado Pago is not configured, return a placeholder record
     if (!token) {
-      const { data: payment, error: pErr } = await admin
+      const { data: payment, error: pErr } = await supabaseAdmin
         .from("payments")
         .insert({
           session_id: data.sessionId,
@@ -242,7 +276,7 @@ export const createPixPayment = createServerFn({ method: "POST" })
     };
     const tx = mp.point_of_interaction?.transaction_data ?? {};
 
-    const { data: payment, error: pErr } = await admin
+    const { data: payment, error: pErr } = await supabaseAdmin
       .from("payments")
       .insert({
         session_id: data.sessionId,
@@ -274,8 +308,8 @@ export const checkPayment = createServerFn({ method: "POST" })
     z.object({ paymentId: z.string().uuid() }).parse(data),
   )
   .handler(async ({ data }) => {
-    const admin = await getAdmin();
-    const { data: payment, error } = await admin
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: payment, error } = await supabaseAdmin
       .from("payments")
       .select("id, provider_payment_id, status, session_id")
       .eq("id", data.paymentId)
@@ -305,13 +339,13 @@ export const checkPayment = createServerFn({ method: "POST" })
     const mp = (await res.json()) as { status: string };
 
     if (mp.status !== payment.status) {
-      await admin
+      await supabaseAdmin
         .from("payments")
         .update({ status: mp.status })
         .eq("id", payment.id);
 
       if (mp.status === "approved" && payment.session_id) {
-        await admin
+        await supabaseAdmin
           .from("call_sessions")
           .update({ status: "paid", paid_at: new Date().toISOString(), has_paid: true })
           .eq("id", payment.session_id);
