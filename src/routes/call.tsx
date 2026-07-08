@@ -13,8 +13,9 @@ import {
   confirmRecordingUploaded,
   getCallSettings,
 } from "@/lib/call.functions";
+import { saveLeadPhone } from "@/lib/telegram.functions";
 import { toast } from "sonner";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Phone } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Copy, Phone, Send } from "lucide-react";
 
 type Settings = {
   model_name: string;
@@ -25,6 +26,7 @@ type Settings = {
   offer_title: string;
   offer_subtitle: string;
   contact_url: string | null;
+  telegram_bot_username: string | null;
 };
 
 type Phase =
@@ -108,6 +110,9 @@ function CallPage() {
   const getUploadUrlFn = useServerFn(getRecordingUploadUrl);
   const confirmUploadFn = useServerFn(confirmRecordingUploaded);
   const getSettingsFn = useServerFn(getCallSettings);
+  const savePhoneFn = useServerFn(saveLeadPhone);
+
+  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
